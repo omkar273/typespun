@@ -89,7 +89,7 @@ bun add --dev typespun-codegen
 The installed executable remains `typespun`, regardless of the package name:
 
 ```sh
-bunx typespun generate
+bun run config:generate
 ```
 
 The package manifests declare only runtime versions covered by CI. The v1 test

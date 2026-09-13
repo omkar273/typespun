@@ -9,8 +9,8 @@ runs on the supported Node.js versions.
 - TypeScript 6
 - An ESM TypeScript project with `package.json` and `tsconfig.json`
 
-Typespun is published at version 0.1.0 and remains pre-release software. Pin the
-version if you need reproducible early adoption.
+Typespun remains pre-release software. Pin the package versions if you need
+reproducible early adoption.
 
 ## 1. Install both packages
 

@@ -55,7 +55,7 @@ describe('published package contents', () => {
 
     expect(runtime.private).toBeUndefined();
     expect(codegen.private).toBeUndefined();
-    expect(codegenDependencies.typespun).toBe('0.1.0');
+    expect(codegenDependencies.typespun).toBe(runtime.version);
     expect(codegenDependencies.typespun.startsWith('workspace:')).toBe(false);
     expect(Object.keys(runtimeDependencies)).toEqual(['dotenv']);
     expect(runtimeDependencies).not.toHaveProperty('typescript');

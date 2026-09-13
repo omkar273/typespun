@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
   <title id="title">Typespun project mark</title>
-  <desc id="desc">Five threads converge through a spindle into typed brackets.</desc>
+  <desc id="desc">Four threads converge through a spindle into typed brackets.</desc>
+  <rect width="64" height="64" rx="12" fill="#F6F9FB"/>
   <g fill="none" stroke="#132238" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5 12h9c8 0 9 12 18 12"/>
     <path d="M5 24h11c6 0 8 4 16 4"/>

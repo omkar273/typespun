@@ -14,7 +14,7 @@ and secret-aware diagnostics for Node.js and Bun applications.
 environment parsing, and validation schemas. Declare an interface or decorated
 class, run the generator, and commit a deterministic TypeScript loader. At
 startup it resolves defaults, dotenv, environment values, and typed overrides,
-then reports missing and invalid fields together in one ConfigError at runtime.
+then reports missing and invalid fields together in ConfigError at runtime.
 
 **100 words:** Typespun is a generated configuration system for TypeScript.
 Instead of maintaining a TypeScript type beside environment parsing and a
@@ -177,8 +177,8 @@ constructs fail generation.
 
 ### Is it stable?
 
-It is published as pre-release software at version 0.1.0. Pin versions and
-review generated diffs during early adoption.
+The current source targets pre-release version 0.1.1. Pin versions and review
+generated diffs during early adoption.
 
 ### What does “Node.js and Bun support” mean?
 

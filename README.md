@@ -158,9 +158,9 @@ The `typespun` runtime is configured with ESM and CommonJS entry points. Generat
 `.mts`, and `.cts` modules use import specifiers derived from the selected
 TypeScript module settings. The `typespun-codegen` package and CLI are ESM.
 
-Typespun is published as pre-release software at version `0.1.0`. The current
-scope is intentionally narrow: synchronous environment, dotenv, defaults-file,
-and override resolution; one configuration root per project; no provider plugin
+The current source targets pre-release version `0.1.1`. Its scope is
+intentionally narrow: synchronous environment, dotenv, defaults-file, and
+override resolution; one configuration root per project; no provider plugin
 system or runtime JSON/YAML source.
 
 ## Documentation
