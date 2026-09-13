@@ -3,6 +3,7 @@ import type {
   GeneratedSchema,
   LoadConfigOptions,
 } from './schema.js';
+import { resolveConfig } from './runtime/resolve.js';
 
 export type {
   DeepPartial,
@@ -11,6 +12,8 @@ export type {
   GeneratedSchema,
   LoadConfigOptions,
 } from './schema.js';
+
+export { resolveConfig } from './runtime/resolve.js';
 
 export function validateTypedValue(
   kind: FieldKind,
@@ -41,11 +44,9 @@ export function validateTypedValue(
 }
 
 export function createLoader<T>(
-  _schema: GeneratedSchema,
+  schema: GeneratedSchema,
 ): (options?: LoadConfigOptions<T>) => T {
-  return () => {
-    throw new Error('resolver not implemented');
-  };
+  return (options) => resolveConfig<T>(schema, options);
 }
 
 function isArrayElement(
