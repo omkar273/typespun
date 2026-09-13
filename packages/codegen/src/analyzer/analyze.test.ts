@@ -869,3 +869,12 @@ export interface Settings {
     { code: 'duplicate_env', line: 8, column: 3 },
   ]);
 });
+
+test('review bounds expanding inherited generics through type-parameter properties', () => {
+  expect(
+    diagnosticSummary(`interface Wrap<T> { next: T }
+interface Loop<T> extends Wrap<Loop<T[]>> {}
+/** @typespun */
+export interface Settings { loop: Loop<number> }`),
+  ).toEqual([{ code: 'schema_too_deep', line: 1, column: 21 }]);
+});

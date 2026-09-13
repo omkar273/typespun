@@ -345,16 +345,13 @@ export function analyzeProgram(
         );
         continue;
       }
-      // Conditional generic types can keep producing fresh identities forever.
+      // Generic types can keep producing fresh identities forever, including
+      // inheritance that substitutes a fresh type into a type-parameter field.
       // Bound that undecidable expansion separately from proven type cycles.
-      if (
-        activeProperties.has(node) &&
-        canChangeShape(node) &&
-        propertyPath.length >= 128
-      ) {
+      if (activeProperties.has(node) && propertyPath.length >= 128) {
         report(
           'schema_too_deep',
-          'Conditional type expansion exceeds the supported analysis depth of 128.',
+          'Generic type expansion exceeds the supported analysis depth of 128.',
           node,
         );
         continue;
