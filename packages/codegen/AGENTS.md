@@ -45,6 +45,9 @@
   existing scripts and configuration, reject conflicting flags and aliased
   input/output paths, and never overwrite application-owned output. Do not add
   implicit package installation or a force-overwrite path.
+- Fresh initialization creates `config.yaml` and a commented `typespun.json`.
+  Keep only selected settings active, keep every optional setting discoverable
+  in comments, and update JSON-with-comments parsing and CLI tests together.
 - Diagnostics involving secrets must not disclose received values.
 
 ## Dependencies and commands

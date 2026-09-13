@@ -44,7 +44,8 @@ The default initialization creates, when missing:
   field;
 - `config.yaml`, containing `port: 3000` for a runnable default;
 - `typespun.json`, pointing from `src/config.ts` to
-  `src/generated/typespun.ts` and the defaults file; and
+  `src/generated/typespun.ts`, with commented examples for every optional
+  setting and allowed policy value; and
 - `config:generate` and `config:check` scripts in `package.json`.
 
 When both `typespun` and `typespun-codegen` resolve from the project or an

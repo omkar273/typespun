@@ -103,7 +103,10 @@ export function loadProjectConfig(
 function readProjectConfig(path: string): RawProjectConfig {
   let value: unknown;
   try {
-    const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'));
+    const parsed = ts.parseConfigFileTextToJson(
+      path,
+      readFileSync(path, 'utf8'),
+    );
     if (parsed.error !== undefined) throw new Error('invalid JSON');
     value = parsed.config;
   } catch {

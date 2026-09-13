@@ -12,6 +12,7 @@ import {
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import ts from 'typescript';
 
 const binPath = join(import.meta.dir, '..', 'bin.ts');
 const temporaryDirectories: string[] = [];
@@ -110,13 +111,16 @@ describe('init', () => {
     expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
       `/** @typespun */\nexport interface AppConfig {\n  port: number;\n}\n`,
     );
-    expect(
-      JSON.parse(await readFile(join(project, 'typespun.json'), 'utf8')),
-    ).toEqual({
+    const configText = await readFile(join(project, 'typespun.json'), 'utf8');
+    expect(parseJsonWithComments(configText)).toEqual({
       input: 'src/config.ts',
       output: 'src/generated/typespun.ts',
-      defaults: 'config.yaml',
     });
+    expect(configText).toContain('// "envPrefix": "APP",');
+    expect(configText).toContain('// "tsconfig": "tsconfig.json",');
+    expect(configText).toContain('// "defaults": {');
+    expect(configText).toContain('Allowed: "error", "warn", or "ignore".');
+    expect(configText).toContain('// "secretDefaults": "warn"');
     expect(await readFile(join(project, 'config.yaml'), 'utf8')).toBe(
       'port: 3000\n',
     );
@@ -175,12 +179,13 @@ describe('init', () => {
       '@Config()\nexport class AppConfig',
     );
     expect(
-      JSON.parse(await readFile(join(project, 'typespun.json'), 'utf8')),
+      parseJsonWithComments(
+        await readFile(join(project, 'typespun.json'), 'utf8'),
+      ),
     ).toEqual({
       input: 'config/app.mts',
       output: 'config/generated.mts',
       envPrefix: 'APP_',
-      defaults: 'config.yaml',
     });
   });
 
@@ -348,7 +353,6 @@ describe('init', () => {
       input: 'settings/app.ts',
       output: 'settings/generated.ts',
       envPrefix: 'APP',
-      defaults: 'config.yaml',
     });
     expect(await Bun.file(join(project, 'settings/app.ts')).exists()).toBe(
       true,
@@ -492,4 +496,10 @@ async function runCliWithEnv(
     new Response(child.stderr).text(),
   ]);
   return { exitCode, stdout, stderr };
+}
+
+function parseJsonWithComments(text: string): unknown {
+  const parsed = ts.parseConfigFileTextToJson('typespun.json', text);
+  if (parsed.error !== undefined) throw new Error('invalid test JSON');
+  return parsed.config;
 }

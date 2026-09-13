@@ -99,14 +99,28 @@ export interface AppConfig {
 }
 ```
 
-`typespun.json` records the selected paths and prefix:
+`typespun.json` records the selected paths and prefix. The parser accepts JSON
+with comments, so every optional setting stays visible without being enabled:
 
-```json
+```jsonc
 {
   "input": "src/config.ts",
   "output": "src/generated/typespun.ts",
   "envPrefix": "APP",
-  "defaults": "config.yaml"
+
+  // Environment keys use the configured prefix, such as APP_PORT.
+
+  // Optional tsconfig override. Default: nearest tsconfig.json to the input.
+  // "tsconfig": "tsconfig.json",
+
+  // Optional defaults override. config.yaml is discovered automatically.
+  // "defaults": {
+  //   "path": "config.yaml",
+  //   "unknownKeys": "error" // Allowed: "error", "warn", or "ignore".
+  // },
+
+  // Policy for defaults on secret fields. Allowed: "warn", "allow", or "error".
+  // "secretDefaults": "warn"
 }
 ```
 

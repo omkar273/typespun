@@ -27,8 +27,10 @@ files exist, adds missing `config:generate`/`config:check` scripts without
 replacing existing scripts, and performs first generation when dependencies are
 installed. A new default schema gets `port: 3000`; an existing schema gets an
 empty defaults object. An existing conventional JSON/YAML defaults file is
-preserved and discovered instead. `init` never runs a package installer; if
-dependencies are absent it prints manager-specific commands.
+preserved and discovered instead. A newly created `typespun.json` uses comments
+to show every optional setting and allowed policy value while leaving unused
+options disabled. `init` never runs a package installer; if dependencies are
+absent it prints manager-specific commands.
 
 `init` is idempotent for an initialized project. It refuses conflicting flags,
 input/output aliases, symlinks that alias them, and any output not recognizable

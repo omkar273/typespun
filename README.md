@@ -43,16 +43,25 @@ export interface AppConfig {
 }
 ```
 
-It also creates `typespun.json`:
+It also creates a commented `typespun.json`:
 
-```json
+```jsonc
 {
   "input": "src/config.ts",
   "output": "src/generated/typespun.ts",
   "envPrefix": "APP",
-  "defaults": "config.yaml"
+
+  // "tsconfig": "tsconfig.json",
+  // "defaults": {
+  //   "path": "config.yaml",
+  //   "unknownKeys": "error" // "error", "warn", or "ignore"
+  // },
+  // "secretDefaults": "warn" // "warn", "allow", or "error"
 }
 ```
+
+Every optional setting remains visible with its allowed values, but only the
+selected settings are active. `config.yaml` is discovered automatically.
 
 It creates `config.yaml` with a working default:
 

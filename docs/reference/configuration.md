@@ -1,8 +1,9 @@
 # `typespun.json` reference
 
-`typespun.json` is optional. It is strict JSON; unknown keys and wrong value
-types are errors. Relative paths resolve from the file’s directory. When the
-file is absent, conventions resolve from the CLI working directory.
+`typespun.json` is optional. It accepts JSON with JavaScript-style comments;
+unknown keys and wrong value types are errors. Relative paths resolve from the
+file’s directory. When the file is absent, conventions resolve from the CLI
+working directory.
 
 ```json
 {
