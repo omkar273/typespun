@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reports
+    url: https://github.com/omkar273/typespun/blob/main/SECURITY.md
+    about: Read the private-reporting instructions before sharing any details.
+  - name: Support and usage questions
+    url: https://github.com/omkar273/typespun/blob/main/SUPPORT.md
+    about: See what information to include and where to ask for help.

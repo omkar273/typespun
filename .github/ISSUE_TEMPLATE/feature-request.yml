@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose an improvement to Typespun.
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem before the API. Significant public-contract changes should be discussed before implementation.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for a similar proposal.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What use case is difficult or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior and, when useful, show the desired API.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Runtime
+        - Decorators
+        - JSDoc and TypeScript analysis
+        - Code generation
+        - CLI and project configuration
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or different designs did you consider?
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and risks
+      description: Note effects on precedence, coercion, generated output, Bun or Node portability, and security.
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

@@ -1,0 +1,89 @@
+name: Bug report
+description: Report reproducible incorrect behavior in Typespun.
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove secrets and sensitive configuration before submitting. Report vulnerabilities according to SECURITY.md instead.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for an existing report.
+          required: true
+        - label: I removed credentials and other sensitive values from this report.
+          required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options:
+        - typespun
+        - '@typespun/codegen'
+        - Both
+        - Unsure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Bun
+        - Node.js
+        - Both
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the runtime version, operating system, and architecture.
+      placeholder: Bun 1.4.1, macOS 15, arm64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide a repository link or sanitized declaration, typespun.json, input files, and commands.
+      render: typescript
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include sanitized errors or logs when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add anything else that helps reproduce or diagnose the problem.
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

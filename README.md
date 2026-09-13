@@ -37,3 +37,10 @@ bun run build
 ```
 
 Both packages remain private until their initial public contracts are implemented and reviewed.
+
+## Community
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing or implementing a change.
+- Use [SUPPORT.md](SUPPORT.md) for bugs, feature proposals, and usage questions.
+- Follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
+- Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
