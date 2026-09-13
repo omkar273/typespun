@@ -325,6 +325,40 @@ describe('compiled defaults', () => {
     },
   );
 
+  test.each([
+    ['error', 'null'],
+    ['error', 'true'],
+    ['error', '[]'],
+    ['warn', 'null'],
+    ['warn', 'true'],
+    ['warn', '[]'],
+    ['ignore', 'null'],
+    ['ignore', 'true'],
+    ['ignore', '[]'],
+  ] as const)(
+    'rejects a %s-policy known object branch supplied as %s',
+    (unknownKeys, suppliedValue) => {
+      const result = compileDefaults(
+        { path: 'config.json', content: `{"server":${suppliedValue}}` },
+        fields,
+        { unknownKeys, secretDefaults: 'allow' },
+      );
+
+      expect(result.errors).toEqual([
+        {
+          code: 'invalid_default_value',
+          path: 'server',
+          file: 'config.json',
+          message: 'Expected an object for nested defaults',
+        },
+      ]);
+      expect(result.warnings).toEqual([]);
+      expect(result.values).toEqual({
+        server: { host: 'localhost', port: 3000 },
+      });
+    },
+  );
+
   test('validates scalar and array YAML defaults without exposing supplied values', () => {
     const result = compileDefaults(
       {
@@ -397,6 +431,47 @@ describe('compiled defaults', () => {
         server: { host: 'localhost', port: 3000 },
       });
       expect(({} as { token?: string }).token).toBeUndefined();
+    },
+  );
+
+  test.each([
+    ['error', '__proto__'],
+    ['error', 'constructor'],
+    ['error', 'prototype'],
+    ['warn', '__proto__'],
+    ['warn', 'constructor'],
+    ['warn', 'prototype'],
+    ['ignore', '__proto__'],
+    ['ignore', 'constructor'],
+    ['ignore', 'prototype'],
+  ] as const)(
+    'rejects unsafe %s defaults keys hidden in an unknown array subtree under the %s policy',
+    (unknownKeys, key) => {
+      const result = compileDefaults(
+        {
+          path: 'config.json',
+          content: `{"excluded":{"items":[{"${key}":"shh"}]}}`,
+        },
+        fields,
+        { unknownKeys, secretDefaults: 'allow' },
+      );
+
+      expect(
+        result.errors.filter(
+          (diagnostic) => diagnostic.code === 'unsafe_defaults_key',
+        ),
+      ).toEqual([
+        {
+          code: 'unsafe_defaults_key',
+          path: `excluded.items.0.${key}`,
+          file: 'config.json',
+          message: 'Defaults path contains an unsafe key',
+        },
+      ]);
+      expect(result.values).toEqual({
+        server: { host: 'localhost', port: 3000 },
+      });
+      expect(JSON.stringify(result.errors)).not.toContain('shh');
     },
   );
 });

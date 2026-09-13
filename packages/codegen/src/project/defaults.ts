@@ -82,6 +82,7 @@ export function compileDefaults(
     return { values, warnings, errors };
   }
 
+  collectUnsafeKeys(parsed, [], document.path, errors);
   walkDefaults(
     parsed,
     [],
@@ -166,14 +167,6 @@ function walkDefaults(
   for (const [key, child] of Object.entries(value)) {
     const childPath = [...path, key];
     if (DANGEROUS_KEYS.has(key)) {
-      errors.push(
-        diagnostic(
-          'unsafe_defaults_key',
-          childPath,
-          file,
-          'Defaults path contains an unsafe key',
-        ),
-      );
       continue;
     }
 
@@ -192,7 +185,18 @@ function walkDefaults(
       continue;
     }
 
-    if (isRecord(child) && hasDefaultsDescendant(fields, childPath)) {
+    if (hasDefaultsDescendant(fields, childPath)) {
+      if (!isRecord(child)) {
+        errors.push(
+          diagnostic(
+            'invalid_default_value',
+            childPath,
+            file,
+            'Expected an object for nested defaults',
+          ),
+        );
+        continue;
+      }
       walkDefaults(
         child,
         childPath,
@@ -208,6 +212,39 @@ function walkDefaults(
     }
 
     reportUnknownPath(childPath, policies.unknownKeys, file, warnings, errors);
+  }
+}
+
+function collectUnsafeKeys(
+  value: unknown,
+  path: readonly string[],
+  file: string,
+  errors: DefaultsDiagnostic[],
+): void {
+  if (Array.isArray(value)) {
+    for (const [index, child] of value.entries()) {
+      collectUnsafeKeys(child, [...path, String(index)], file, errors);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = [...path, key];
+    if (DANGEROUS_KEYS.has(key)) {
+      errors.push(
+        diagnostic(
+          'unsafe_defaults_key',
+          childPath,
+          file,
+          'Defaults path contains an unsafe key',
+        ),
+      );
+    }
+    collectUnsafeKeys(child, childPath, file, errors);
   }
 }
 
