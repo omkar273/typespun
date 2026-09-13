@@ -455,8 +455,8 @@ test('decorated class handles namespace imports and readonly primitive initializ
   const result = analyze(`import * as schema from 'typespun';
 @schema.Config()
 export class Settings {
-  readonly port = 3000;
-  readonly enabled = true;
+  readonly port: number = 3000;
+  readonly enabled: boolean = true;
 }`);
   expect(result.diagnostics).toEqual([]);
   expect(
@@ -534,7 +534,7 @@ export interface Settings {
   /** @key db */
   second: { host: string };
 }`),
-  ).toEqual([{ code: 'duplicate_defaults_path', line: 6, column: 13 }]);
+  ).toEqual([{ code: 'duplicate_defaults_path', line: 6, column: 3 }]);
 });
 
 test('unknown and unsafe inline object defaults are rejected', () => {
@@ -662,4 +662,210 @@ test('unsupported expanding generic recursion terminates with a source diagnosti
 /** @typespun */
 export interface Settings { loop: Loop<number> }`),
   ).toEqual([{ code: 'recursive_type', line: 1, column: 18 }]);
+});
+
+test.each([
+  ['1', '2'],
+  ['true', 'false'],
+  ['false', 'true'],
+  ['1[]', '[2]'],
+  ['true[]', '[false]'],
+])(
+  'review rejects singleton %s despite contradictory default %s',
+  (type, value) => {
+    expect(
+      diagnosticSummary(`/** @typespun */
+export interface Settings {
+  /** @default ${value} */
+  value: ${type};
+}`),
+    ).toEqual([{ code: 'unsupported_type', line: 4, column: 3 }]);
+  },
+);
+
+test('review rejects inferred readonly singletons instead of widening their root type', () => {
+  expect(
+    diagnosticSummary(`import { Config } from 'typespun';
+@Config()
+export class Settings {
+  readonly port = 1;
+  readonly enabled = true;
+}`),
+  ).toEqual([
+    { code: 'unsupported_type', line: 4, column: 3 },
+    { code: 'unsupported_type', line: 5, column: 3 },
+  ]);
+});
+
+test.each([
+  [
+    '/** @typespun */\ninterface Settings { port: number }\nexport { Settings as PublicSettings };',
+    { kind: 'named', name: 'PublicSettings' },
+  ],
+  [
+    '/** @typespun */\nexport default interface Settings { port: number }',
+    { kind: 'default' },
+  ],
+  [
+    'import { Config } from "typespun";\n@Config()\nexport default class Settings { port = 1; }',
+    { kind: 'default' },
+  ],
+] as const)(
+  'review retains importable identity for %s',
+  (source, rootExport) => {
+    const result = analyze(source);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.rootName).toBe('Settings');
+    expect(result.rootExport).toEqual(rootExport);
+  },
+);
+
+test.each([
+  ['(): string;', 18],
+  ['new (): { value: string };', 18],
+])('review rejects inherited callable signature %s', (signature, column) => {
+  expect(
+    diagnosticSummary(`interface Base { ${signature} }
+interface Middle extends Base {}
+/** @typespun */
+export interface Settings extends Middle { port: number }`),
+  ).toEqual([{ code: 'unsupported_type', line: 1, column }]);
+});
+
+test('review finite conditional generic walk resolves every leaf', () => {
+  const result =
+    analyze(`type Walk<T extends unknown[]> = T extends [unknown, ...infer Rest]
+  ? { next: Walk<Rest> } : { value: string };
+/** @typespun */
+export interface Settings { walk: Walk<[1, 2, 3, 4]> }`);
+  expect(result.diagnostics).toEqual([]);
+  expect(
+    result.fields.map(({ propertyPath, kind }) => ({ propertyPath, kind })),
+  ).toEqual([
+    {
+      propertyPath: ['walk', 'next', 'next', 'next', 'next', 'value'],
+      kind: { type: 'string' },
+    },
+  ]);
+});
+
+test('review recursively merges nested object inline defaults with parent precedence', () => {
+  const result = analyze(`interface Database {
+  /** @default {"host":"inner","port":123,"nested":{"a":"old","b":"keep"},"names":["old"]} */
+  connection: { host: string; port: number; nested: { a: string; b: string }; names: string[] };
+}
+/** @typespun */
+export interface Settings {
+  /** @default {"connection":{"host":"outer","nested":{"a":"new"},"names":["new"]}} */
+  database: Database;
+}`);
+  expect(result.diagnostics).toEqual([]);
+  expect(
+    result.fields.map(({ propertyPath, hasDefault, defaultValue }) => ({
+      propertyPath,
+      hasDefault,
+      defaultValue,
+    })),
+  ).toEqual([
+    {
+      propertyPath: ['database', 'connection', 'host'],
+      hasDefault: true,
+      defaultValue: 'outer',
+    },
+    {
+      propertyPath: ['database', 'connection', 'port'],
+      hasDefault: true,
+      defaultValue: 123,
+    },
+    {
+      propertyPath: ['database', 'connection', 'nested', 'a'],
+      hasDefault: true,
+      defaultValue: 'new',
+    },
+    {
+      propertyPath: ['database', 'connection', 'nested', 'b'],
+      hasDefault: true,
+      defaultValue: 'keep',
+    },
+    {
+      propertyPath: ['database', 'connection', 'names'],
+      hasDefault: true,
+      defaultValue: ['new'],
+    },
+  ]);
+});
+
+test('review duplicate object defaults paths reject disjoint descendants', () => {
+  expect(
+    diagnosticSummary(`/** @typespun */
+export interface Settings {
+  /** @key database */
+  first: { host: string };
+  /** @key database */
+  second: { port: number };
+}`),
+  ).toEqual([{ code: 'duplicate_defaults_path', line: 6, column: 3 }]);
+});
+
+test.each([
+  ['type Combined = { host: string } & {};', 2],
+  ['type Original = { host: string } & {};\ntype Combined = Original;', 3],
+])(
+  'review rejects intersections across inherited aliases: %s',
+  (alias, line) => {
+    expect(
+      diagnosticSummary(`${alias}
+interface Middle extends Combined {}
+/** @typespun */
+export interface Settings extends Middle {}`),
+    ).toEqual([{ code: 'unsupported_type', line, column: 26 }]);
+  },
+);
+
+test.each(['private', 'protected'])(
+  'review rejects inherited %s class fields',
+  (modifier) => {
+    expect(
+      diagnosticSummary(`class Base { ${modifier} token!: string }
+/** @typespun */
+export interface Settings extends Base {}`),
+    ).toEqual([{ code: 'invalid_class_member', line: 1, column: 14 }]);
+  },
+);
+
+test('review bounds nonterminating conditional generic expansion without throwing', () => {
+  expect(
+    diagnosticSummary(`type Loop<T> = T extends unknown ? { next: Loop<T[]> } : never;
+/** @typespun */
+export interface Settings { loop: Loop<number> }`),
+  ).toEqual([{ code: 'schema_too_deep', line: 1, column: 38 }]);
+});
+
+test('review finite generic walk follows a conditional helper alias', () => {
+  const result =
+    analyze(`type Next<T extends unknown[]> = T extends [unknown, ...infer Rest] ? Walk<Rest> : string;
+type Walk<T extends unknown[]> = { next: Next<T> };
+/** @typespun */
+export interface Settings { walk: Walk<[1, 2, 3]> }`);
+  expect(result.diagnostics).toEqual([]);
+  expect(result.fields.map(({ propertyPath }) => propertyPath)).toEqual([
+    ['walk', 'next', 'next', 'next', 'next'],
+  ]);
+});
+
+test('review aggregates simultaneous defaults and environment collisions', () => {
+  expect(
+    diagnosticSummary(`/** @typespun */
+export interface Settings {
+  /** @key shared
+   * @env SHARED */
+  first: string;
+  /** @key shared
+   * @env SHARED */
+  second: string;
+}`),
+  ).toEqual([
+    { code: 'duplicate_defaults_path', line: 8, column: 3 },
+    { code: 'duplicate_env', line: 8, column: 3 },
+  ]);
 });

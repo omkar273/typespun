@@ -2,7 +2,12 @@ import path from 'node:path';
 import ts from 'typescript';
 import type { FieldKind } from 'typespun/generated';
 import { validateTypedValue } from 'typespun/generated';
-import type { AnalyzeResult, Diagnostic, FieldIR } from '../contracts.js';
+import type {
+  AnalyzeResult,
+  Diagnostic,
+  FieldIR,
+  RootExport,
+} from '../contracts.js';
 import { readAnnotations, typespunSymbols } from './annotations.js';
 import { locationOf, sortDiagnostics } from './diagnostic.js';
 import { evaluateDefault } from './default-expression.js';
@@ -34,12 +39,14 @@ export function analyzeProgram(
       ],
     };
   const moduleSymbol = checker.getSymbolAtLocation(source);
+  const moduleExports = moduleSymbol
+    ? checker.getExportsOfModule(moduleSymbol)
+    : [];
   const exportedSymbols = new Set(
-    (moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []).map(
-      (symbol) =>
-        symbol.flags & ts.SymbolFlags.Alias
-          ? checker.getAliasedSymbol(symbol)
-          : symbol,
+    moduleExports.map((symbol) =>
+      symbol.flags & ts.SymbolFlags.Alias
+        ? checker.getAliasedSymbol(symbol)
+        : symbol,
     ),
   );
   const roots = source.statements.filter(
@@ -58,6 +65,24 @@ export function analyzeProgram(
     return { inputPath, fields, diagnostics };
   }
   const root = roots[0]!;
+  const rootSymbol = checker.getSymbolAtLocation(root.name!);
+  const exportNames = moduleExports
+    .filter(
+      (symbol) =>
+        (symbol.flags & ts.SymbolFlags.Alias
+          ? checker.getAliasedSymbol(symbol)
+          : symbol) === rootSymbol,
+    )
+    .map((symbol) => symbol.name)
+    .sort();
+  const exportName =
+    exportNames.find((name) => name === root.name!.text) ??
+    exportNames.find((name) => name !== 'default') ??
+    'default';
+  const rootExport: RootExport =
+    exportName === 'default'
+      ? { kind: 'default' }
+      : { kind: 'named', name: exportName };
   if (root.typeParameters?.length) {
     report(
       'generic_schema',
@@ -82,17 +107,15 @@ export function analyzeProgram(
       index.declaration ?? root,
     );
   }
-  for (const member of root.members) {
-    if (
-      ts.isCallSignatureDeclaration(member) ||
-      ts.isConstructSignatureDeclaration(member)
-    ) {
-      report(
-        'unsupported_type',
-        'Index and call signatures are not supported.',
-        member,
-      );
-    }
+  for (const signature of [
+    ...rootType.getCallSignatures(),
+    ...rootType.getConstructSignatures(),
+  ]) {
+    report(
+      'unsupported_type',
+      'Call and construct signatures are not supported.',
+      signature.declaration ?? root,
+    );
   }
   const invalidMembers = new Set<ts.Node>();
   if (ts.isClassDeclaration(root)) {
@@ -124,15 +147,20 @@ export function analyzeProgram(
     }
   }
   function containsIntersection(
-    node: ts.TypeNode | undefined,
+    node: ts.TypeNode | ts.ExpressionWithTypeArguments | undefined,
     seen = new Set<ts.Symbol>(),
   ): boolean {
     if (!node) return false;
     if (ts.isIntersectionTypeNode(node)) return true;
     if (ts.isParenthesizedTypeNode(node))
       return containsIntersection(node.type, seen);
-    if (ts.isTypeReferenceNode(node)) {
-      let symbol = checker.getSymbolAtLocation(node.typeName);
+    if (
+      ts.isTypeReferenceNode(node) ||
+      ts.isExpressionWithTypeArguments(node)
+    ) {
+      let symbol = checker.getSymbolAtLocation(
+        ts.isTypeReferenceNode(node) ? node.typeName : node.expression,
+      );
       if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
         symbol = checker.getAliasedSymbol(symbol);
       if (!symbol || seen.has(symbol)) return false;
@@ -147,16 +175,35 @@ export function analyzeProgram(
     }
     return false;
   }
+  const validatedHeritage = new Set<ts.Declaration>();
+  function validateHeritage(type: ts.Type): void {
+    for (const declaration of type.symbol?.declarations ?? []) {
+      if (
+        !ts.isInterfaceDeclaration(declaration) ||
+        validatedHeritage.has(declaration)
+      )
+        continue;
+      validatedHeritage.add(declaration);
+      for (const clause of declaration.heritageClauses ?? []) {
+        for (const base of clause.types) {
+          if (containsIntersection(base)) {
+            report(
+              'unsupported_type',
+              'Intersections are not supported in heritage.',
+              base,
+            );
+          } else {
+            validateHeritage(checker.getTypeAtLocation(base));
+          }
+        }
+      }
+    }
+  }
+  validateHeritage(rootType);
   function kindOf(type: ts.Type): FieldKind | undefined {
     if (type.flags & ts.TypeFlags.String) return { type: 'string' };
     if (type.flags & ts.TypeFlags.Number) return { type: 'number' };
-    if (
-      type.flags & ts.TypeFlags.NumberLiteral &&
-      !(type.flags & ts.TypeFlags.EnumLiteral)
-    )
-      return { type: 'number' };
-    if (type.flags & (ts.TypeFlags.Boolean | ts.TypeFlags.BooleanLiteral))
-      return { type: 'boolean' };
+    if (type.flags & ts.TypeFlags.Boolean) return { type: 'boolean' };
     if (type.flags & ts.TypeFlags.StringLiteral)
       return { type: 'enum', values: [(type as ts.StringLiteralType).value] };
     if (
@@ -181,8 +228,72 @@ export function analyzeProgram(
   }
   const activeTypes = new Set<ts.Type>();
   const activeProperties = new Set<ts.Node>();
+  function hasConditionalType(
+    node: ts.Node,
+    seen = new Set<ts.Symbol>(),
+  ): boolean {
+    if (ts.isConditionalTypeNode(node)) return true;
+    if (ts.isTypeReferenceNode(node)) {
+      let symbol = checker.getSymbolAtLocation(node.typeName);
+      if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
+        symbol = checker.getAliasedSymbol(symbol);
+      if (symbol && !seen.has(symbol)) {
+        seen.add(symbol);
+        if (
+          symbol.declarations?.some(
+            (declaration) =>
+              ts.isTypeAliasDeclaration(declaration) &&
+              hasConditionalType(declaration.type, seen),
+          )
+        )
+          return true;
+      }
+    }
+    return (
+      ts.forEachChild(
+        node,
+        (child) => hasConditionalType(child, seen) || undefined,
+      ) ?? false
+    );
+  }
+  function canChangeShape(
+    node: ts.PropertySignature | ts.PropertyDeclaration,
+  ): boolean {
+    if (node.type && hasConditionalType(node.type)) return true;
+    for (
+      let parent: ts.Node | undefined = node.parent;
+      parent && !ts.isSourceFile(parent);
+      parent = parent.parent
+    ) {
+      if (ts.isConditionalTypeNode(parent)) return true;
+    }
+    return false;
+  }
   const envNames = new Set<string>();
-  const defaultsPaths: string[][] = [];
+  const defaultsPaths = new Set<string>();
+  function mergeInlineDefaults(lower: unknown, upper: unknown): unknown {
+    if (
+      !lower ||
+      !upper ||
+      typeof lower !== 'object' ||
+      typeof upper !== 'object' ||
+      Array.isArray(lower) ||
+      Array.isArray(upper)
+    )
+      return upper;
+    const lowerObject = lower as Record<string, unknown>;
+    const upperObject = upper as Record<string, unknown>;
+    return Object.fromEntries(
+      [
+        ...new Set([...Object.keys(lowerObject), ...Object.keys(upperObject)]),
+      ].map((key) => [
+        key,
+        Object.hasOwn(upperObject, key)
+          ? mergeInlineDefaults(lowerObject[key], upperObject[key])
+          : lowerObject[key],
+      ]),
+    );
+  }
   function isObjectShape(type: ts.Type): boolean {
     return (
       !!(type.flags & ts.TypeFlags.Object) &&
@@ -215,6 +326,37 @@ export function analyzeProgram(
       const name = property.getName();
       if (!(ts.isPropertySignature(node) || ts.isPropertyDeclaration(node))) {
         report('unsupported_type', 'Only data properties are supported.', node);
+        continue;
+      }
+      if (
+        ts.isPropertyDeclaration(node) &&
+        (ts.isPrivateIdentifier(node.name) ||
+          !!(
+            ts.getCombinedModifierFlags(node) &
+            (ts.ModifierFlags.Private |
+              ts.ModifierFlags.Protected |
+              ts.ModifierFlags.Static)
+          ))
+      ) {
+        report(
+          'invalid_class_member',
+          'Configuration classes allow only public instance data properties.',
+          node,
+        );
+        continue;
+      }
+      // Conditional generic types can keep producing fresh identities forever.
+      // Bound that undecidable expansion separately from proven type cycles.
+      if (
+        activeProperties.has(node) &&
+        canChangeShape(node) &&
+        propertyPath.length >= 128
+      ) {
+        report(
+          'schema_too_deep',
+          'Conditional type expansion exceeds the supported analysis depth of 128.',
+          node,
+        );
         continue;
       }
       if (
@@ -277,9 +419,10 @@ export function analyzeProgram(
         Object.hasOwn(parentDefault, name)
       ) {
         annotations.hasDefault = true;
-        annotations.defaultValue = (parentDefault as Record<string, unknown>)[
-          name
-        ];
+        annotations.defaultValue = mergeInlineDefaults(
+          annotations.defaultValue,
+          (parentDefault as Record<string, unknown>)[name],
+        );
       }
       const currentPath = [...propertyPath, name];
       const currentDefaultsPath = [...defaultsPath, annotations.key ?? name];
@@ -294,7 +437,17 @@ export function analyzeProgram(
       }
       if (optional) propertyType = checker.getNonNullableType(propertyType);
       const kind = kindOf(propertyType);
+      const defaultsKey = JSON.stringify(currentDefaultsPath);
+      if (defaultsPaths.has(defaultsKey)) {
+        report(
+          'duplicate_defaults_path',
+          'Multiple fields resolve to conflicting defaults paths.',
+          node,
+        );
+      }
+      defaultsPaths.add(defaultsKey);
       if (!kind && isObjectShape(propertyType)) {
+        validateHeritage(propertyType);
         if (annotations.env !== undefined)
           report('object_env', 'Env annotations apply only to leaves.', node);
         const resolvesTypeParameter =
@@ -305,7 +458,9 @@ export function analyzeProgram(
           );
         if (
           activeTypes.has(propertyType) ||
-          (activeProperties.has(node) && !resolvesTypeParameter)
+          (activeProperties.has(node) &&
+            !resolvesTypeParameter &&
+            !canChangeShape(node))
         ) {
           report(
             'recursive_type',
@@ -387,21 +542,7 @@ export function analyzeProgram(
           'Multiple fields resolve to the same environment name.',
           node,
         );
-      if (
-        defaultsPaths.some((previous) =>
-          previous
-            .slice(0, Math.min(previous.length, currentDefaultsPath.length))
-            .every((part, index) => part === currentDefaultsPath[index]),
-        )
-      ) {
-        report(
-          'duplicate_defaults_path',
-          'Multiple fields resolve to conflicting defaults paths.',
-          node,
-        );
-      }
       envNames.add(envName);
-      defaultsPaths.push(currentDefaultsPath);
       fields.push({
         propertyPath: currentPath,
         defaultsPath: currentDefaultsPath,
@@ -422,7 +563,7 @@ export function analyzeProgram(
   visit(rootType, [], [], [], false);
   return {
     ...(diagnostics.length === 0 && root.name
-      ? { rootName: root.name.text }
+      ? { rootName: root.name.text, rootExport }
       : {}),
     inputPath,
     fields,

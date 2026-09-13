@@ -18,9 +18,15 @@ export interface FieldIR extends FieldSchema {
   readonly kind: FieldKind;
 }
 
+export type RootExport =
+  | { readonly kind: 'named'; readonly name: string }
+  | { readonly kind: 'default' };
+
 export interface AnalyzeResult {
   readonly inputPath: string;
   readonly rootName?: string;
+  /** The import binding for the selected root, present on successful analysis. */
+  readonly rootExport?: RootExport;
   readonly fields: readonly FieldIR[];
   readonly diagnostics: readonly Diagnostic[];
 }
