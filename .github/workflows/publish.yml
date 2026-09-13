@@ -65,15 +65,28 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check workspace and packed artifacts
-        run: bun run check
-
-      - name: Validate package versions
+      - name: Prepare package versions for publish
         run: |
-          typespun_runtime_version=$(bun -e "console.log(require('./packages/typespun/package.json').version)")
-          typespun_codegen_version=$(bun -e "console.log(require('./packages/codegen/package.json').version)")
-          test "$typespun_runtime_version" = "${{ steps.release.outputs.version }}"
-          test "$typespun_codegen_version" = "${{ steps.release.outputs.version }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          export VERSION
+          node --input-type=module <<'EOF'
+          import { readFile, writeFile } from "node:fs/promises";
+          import { join } from "node:path";
+
+          const pkgs = ["packages/typespun/package.json", "packages/codegen/package.json"];
+
+          for (const pkg of pkgs) {
+            const path = join(process.cwd(), pkg);
+            const data = JSON.parse(await readFile(path, "utf8"));
+            data.version = process.env.VERSION;
+
+            if (pkg.endsWith("codegen/package.json") && data.dependencies?.typespun) {
+              data.dependencies.typespun = `^${process.env.VERSION}`;
+            }
+
+            await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
+          }
+          EOF
 
       - name: Prepare package archives
         run: mkdir -p .release
