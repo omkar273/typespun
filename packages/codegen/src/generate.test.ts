@@ -212,6 +212,18 @@ export interface AppConfig {
     expect(() => statSync(retryPath)).toThrow();
   });
 
+  test('uses a bounded temporary basename for a long valid output filename', async () => {
+    const projectDirectory = createProject();
+    const outputPath = join(projectDirectory, `${'a'.repeat(220)}.ts`);
+
+    await atomicWrite(outputPath, 'generated contents');
+
+    expect(readFileSync(outputPath, 'utf8')).toBe('generated contents');
+    expect(
+      Array.from(new Bun.Glob('.typespun.*.tmp').scanSync(projectDirectory)),
+    ).toEqual([]);
+  });
+
   test('keeps fingerprints stable for one explicit config across invocation directories', async () => {
     const projectDirectory = createProject();
     const configPath = join(projectDirectory, 'settings/typespun.custom.json');

@@ -249,8 +249,8 @@ async function readExisting(path: string): Promise<string | undefined> {
 export async function atomicWrite(
   path: string,
   contents: string,
-  temporaryPathForAttempt: (attempt: number) => string = (attempt) =>
-    `${dirname(path)}/.typespun.${basename(path)}.${process.pid}.${attempt}.${randomUUID()}.tmp`,
+  temporaryPathForAttempt: (attempt: number) => string = (_attempt) =>
+    `${dirname(path)}/.typespun.${randomUUID()}.tmp`,
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   let temporaryPath: string | undefined;
