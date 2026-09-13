@@ -222,16 +222,6 @@ export function analyzeProgram(
     }
   }
   validateHeritage(rootType);
-  if (
-    checker.getPropertiesOfType(rootType).length === 0 &&
-    diagnostics.length === 0
-  ) {
-    report(
-      'unsupported_type',
-      'Empty object configuration shapes are not supported.',
-      root,
-    );
-  }
   function kindOf(type: ts.Type): FieldKind | undefined {
     if (type.flags & ts.TypeFlags.String) return { type: 'string' };
     if (type.flags & ts.TypeFlags.Number) return { type: 'number' };
@@ -554,6 +544,8 @@ export function analyzeProgram(
         }
         const alreadyActive = activeProperties.has(node);
         activeProperties.add(node);
+        const fieldsBeforeVisit = fields.length;
+        const diagnosticsBeforeVisit = diagnostics.length;
         visit(
           propertyType,
           currentPath,
@@ -563,6 +555,16 @@ export function analyzeProgram(
           annotations.defaultValue,
         );
         if (!alreadyActive) activeProperties.delete(node);
+        if (
+          fields.length === fieldsBeforeVisit &&
+          diagnostics.length === diagnosticsBeforeVisit
+        ) {
+          report(
+            'unsupported_type',
+            'Configuration object shapes must contain at least one included leaf.',
+            node,
+          );
+        }
         continue;
       }
       if (!kind) {
@@ -616,6 +618,13 @@ export function analyzeProgram(
     activeTypes.delete(type);
   }
   visit(rootType, [], [], [], false);
+  if (fields.length === 0 && diagnostics.length === 0) {
+    report(
+      'unsupported_type',
+      'Configuration roots must contain at least one included leaf.',
+      root,
+    );
+  }
   return {
     ...(diagnostics.length === 0 && root.name
       ? { rootName: root.name.text, rootExport }

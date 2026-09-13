@@ -292,7 +292,9 @@ function compileField(
         'invalid_default_value',
         defaultsPath,
         file,
-        validationMessage,
+        field.secret
+          ? 'Secret default does not match its declared field type'
+          : validationMessage,
       ),
     );
     return;

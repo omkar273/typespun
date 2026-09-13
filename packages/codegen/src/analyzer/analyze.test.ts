@@ -700,6 +700,39 @@ export interface Settings extends Base {}`,
   expect(result.fields).toEqual([]);
 });
 
+test.each([
+  ['required', 'settings: {\n  /** @ignore */\n  hidden: string;\n};'],
+  ['optional', 'settings?: {\n  /** @ignore */\n  hidden: string;\n};'],
+  [
+    'nested',
+    'settings: { nested: {\n  /** @ignore */\n  hidden: string;\n} };',
+  ],
+])(
+  'rejects %s object shapes whose descendants are all ignored',
+  (_label, declaration) => {
+    const result = analyze(`/** @typespun */
+export interface Settings { ${declaration} }`);
+
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      'unsupported_type',
+    ]);
+    expect(result.fields).toEqual([]);
+  },
+);
+
+test('rejects a root whose fields are all ignored', () => {
+  const result = analyze(`/** @typespun */
+export interface Settings {
+  /** @ignore */
+  hidden: string;
+}`);
+
+  expect(result.diagnostics.map(({ code }) => code)).toEqual([
+    'unsupported_type',
+  ]);
+  expect(result.fields).toEqual([]);
+});
+
 test('rejects an empty root object shape', () => {
   const result = analyze(`/** @typespun */
 export interface Settings {}`);

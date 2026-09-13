@@ -532,6 +532,42 @@ describe('compiled defaults', () => {
     expect(JSON.stringify(result.warnings)).not.toContain('file-secret');
   });
 
+  test('redacts allowed enum values when a secret compiled default is invalid', () => {
+    const secretEnumFields = fields.map((field) =>
+      field.secret
+        ? {
+            ...field,
+            kind: {
+              type: 'enum' as const,
+              values: ['public', 'private-key-never-print'],
+            },
+          }
+        : field,
+    );
+    const result = compileDefaults(
+      {
+        path: 'config.yaml',
+        content: 'credentials:\n  token: supplied-private-never-print\n',
+      },
+      secretEnumFields,
+      { unknownKeys: 'error', secretDefaults: 'warn' },
+    );
+
+    expect(result.errors).toEqual([
+      {
+        code: 'invalid_default_value',
+        path: 'credentials.token',
+        file: 'config.yaml',
+        message: 'Secret default does not match its declared field type',
+      },
+    ]);
+    expect(result.warnings).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain('private-key-never-print');
+    expect(JSON.stringify(result)).not.toContain(
+      'supplied-private-never-print',
+    );
+  });
+
   test.each(['__proto__', 'constructor', 'prototype'] as const)(
     'rejects prototype-pollution defaults key %s',
     (key) => {
