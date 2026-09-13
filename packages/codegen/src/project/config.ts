@@ -13,6 +13,7 @@ export interface LoadProjectConfigOptions {
 }
 
 export interface ProjectConfigResult {
+  readonly configDirectory: string;
   readonly inputPath: string;
   readonly outputPath: string;
   readonly tsconfigPath: string;
@@ -87,6 +88,7 @@ export function loadProjectConfig(
   const envPrefix = config.envPrefix?.replace(/_+$/, '');
 
   return {
+    configDirectory,
     inputPath,
     outputPath,
     tsconfigPath,
