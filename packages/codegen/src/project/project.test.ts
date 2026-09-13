@@ -120,6 +120,44 @@ describe('project discovery', () => {
 });
 
 describe('project configuration', () => {
+  test('uses an explicit arbitrary config path and resolves paths from its directory', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'src/config.ts',
+      'export interface Wrong {}',
+    );
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+    writeProjectFile(
+      projectDirectory,
+      'typespun.json',
+      JSON.stringify({ input: 'src/config.ts' }),
+    );
+    const configPath = writeProjectFile(
+      projectDirectory,
+      'settings/custom.json',
+      JSON.stringify({
+        input: '../schema/config.mts',
+        output: '../generated/loader.mts',
+        tsconfig: '../tsconfig.json',
+      }),
+    );
+    writeProjectFile(
+      projectDirectory,
+      'schema/config.mts',
+      'export interface Config {}',
+    );
+
+    const result = loadProjectConfig({ projectDirectory, configPath });
+
+    expect(result.inputPath).toBe(
+      resolve(projectDirectory, 'schema/config.mts'),
+    );
+    expect(result.outputPath).toBe(
+      resolve(projectDirectory, 'generated/loader.mts'),
+    );
+  });
+
   test('resolves strict configuration paths and normalizes policy values', () => {
     const projectDirectory = createProject();
     writeProjectFile(

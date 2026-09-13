@@ -9,6 +9,7 @@ import {
 
 export interface LoadProjectConfigOptions {
   readonly projectDirectory: string;
+  readonly configPath?: string;
 }
 
 export interface ProjectConfigResult {
@@ -58,11 +59,12 @@ export function loadProjectConfig(
   options: LoadProjectConfigOptions,
 ): ProjectConfigResult {
   const projectDirectory = resolve(options.projectDirectory);
-  const configPath = resolve(projectDirectory, 'typespun.json');
-  const config = existsSync(configPath) ? readProjectConfig(configPath) : {};
-  const configDirectory = existsSync(configPath)
-    ? dirname(configPath)
-    : projectDirectory;
+  const configPath = options.configPath
+    ? resolve(projectDirectory, options.configPath)
+    : resolve(projectDirectory, 'typespun.json');
+  const hasConfig = options.configPath !== undefined || existsSync(configPath);
+  const config = hasConfig ? readProjectConfig(configPath) : {};
+  const configDirectory = hasConfig ? dirname(configPath) : projectDirectory;
 
   const inputPath = config.input
     ? resolve(configDirectory, config.input)
