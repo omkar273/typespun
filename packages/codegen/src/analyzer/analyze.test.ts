@@ -642,6 +642,89 @@ export { Settings };`);
   expect(result.rootName).toBe('Settings');
 });
 
+test('rejects a TypeScript root whose nested schema shape is declared in JavaScript', () => {
+  const sharedPath = path.join(path.dirname(inputPath), 'shared.fixture.js');
+  const program = createTestProgram(
+    {
+      [sharedPath]: `export class Credentials {
+  /** @secret */
+  token = 'not-a-default';
+}`,
+      [inputPath]: `import { Credentials } from './shared.fixture.js';
+/** @typespun */
+export interface Settings { credentials: Credentials }`,
+    },
+    { allowJs: true },
+  );
+
+  const result = analyzeProgram(program, inputPath, '');
+
+  expect(
+    result.diagnostics.map(({ code, location }) => ({
+      code,
+      file: path.basename(location.file),
+      line: location.line,
+      column: location.column,
+    })),
+  ).toEqual([
+    {
+      code: 'javascript_schema',
+      file: 'shared.fixture.js',
+      line: 1,
+      column: 1,
+    },
+  ]);
+  expect(result.fields).toEqual([]);
+});
+
+test('rejects a TypeScript root that inherits an empty JavaScript class', () => {
+  const sharedPath = path.join(path.dirname(inputPath), 'shared.fixture.js');
+  const program = createTestProgram(
+    {
+      [sharedPath]: 'export class Base {}',
+      [inputPath]: `import { Base } from './shared.fixture.js';
+/** @typespun */
+export interface Settings extends Base {}`,
+    },
+    { allowJs: true },
+  );
+
+  const result = analyzeProgram(program, inputPath, '');
+
+  expect(
+    result.diagnostics.map(({ code, location }) => ({
+      code,
+      file: path.basename(location.file),
+    })),
+  ).toEqual([{ code: 'javascript_schema', file: 'shared.fixture.js' }]);
+  expect(result.fields).toEqual([]);
+});
+
+test('rejects an empty root object shape', () => {
+  const result = analyze(`/** @typespun */
+export interface Settings {}`);
+
+  expect(result.diagnostics.map(({ code }) => code)).toEqual([
+    'unsupported_type',
+  ]);
+  expect(result.fields).toEqual([]);
+});
+
+test.each([
+  ['required', 'settings: {};'],
+  ['optional', 'settings?: {};'],
+  ['nested required', 'settings: { nested: {} };'],
+  ['nested optional', 'settings?: { nested?: {} };'],
+])('rejects %s empty object configuration shapes', (_label, declaration) => {
+  const result = analyze(`/** @typespun */
+export interface Settings { ${declaration} }`);
+
+  expect(result.diagnostics.map(({ code }) => code)).toEqual([
+    'unsupported_type',
+  ]);
+  expect(result.fields).toEqual([]);
+});
+
 test('decorated class gathers invalid members and defaults together', () => {
   expect(
     diagnosticSummary(`import { Config } from 'typespun';

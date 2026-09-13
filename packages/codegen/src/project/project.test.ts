@@ -455,6 +455,83 @@ describe('compiled defaults', () => {
     },
   );
 
+  test.each([
+    [
+      'warn',
+      1,
+      0,
+      {
+        server: { host: 'localhost', port: 3000 },
+        credentials: { token: 'inline-secret' },
+      },
+    ],
+    [
+      'allow',
+      0,
+      0,
+      {
+        server: { host: 'localhost', port: 3000 },
+        credentials: { token: 'inline-secret' },
+      },
+    ],
+    ['error', 0, 1, { server: { host: 'localhost', port: 3000 } }],
+  ] as const)(
+    'applies the %s secret-default policy to inline defaults',
+    (secretDefaults, warningCount, errorCount, expectedValues) => {
+      const inlineSecretFields = fields.map((field) =>
+        field.secret
+          ? { ...field, hasDefault: true, defaultValue: 'inline-secret' }
+          : field,
+      );
+      const result = compileDefaults(
+        { path: 'config.yaml', content: '{}' },
+        inlineSecretFields,
+        { unknownKeys: 'error', secretDefaults },
+      );
+
+      expect(result.values).toEqual(expectedValues);
+      expect(result.warnings).toHaveLength(warningCount);
+      expect(result.errors).toHaveLength(errorCount);
+      for (const diagnostic of [...result.warnings, ...result.errors]) {
+        expect(diagnostic).toMatchObject({
+          code: 'secret_default',
+          path: 'credentials.token',
+          file: 'config.ts',
+        });
+        expect(JSON.stringify(diagnostic)).not.toContain('inline-secret');
+      }
+    },
+  );
+
+  test('reports one secret-default warning when a compiled value overrides an inline value', () => {
+    const inlineSecretFields = fields.map((field) =>
+      field.secret
+        ? { ...field, hasDefault: true, defaultValue: 'inline-secret' }
+        : field,
+    );
+    const result = compileDefaults(
+      { path: 'config.yaml', content: 'credentials:\n  token: file-secret\n' },
+      inlineSecretFields,
+      { unknownKeys: 'error', secretDefaults: 'warn' },
+    );
+
+    expect(result.values).toEqual({
+      server: { host: 'localhost', port: 3000 },
+      credentials: { token: 'file-secret' },
+    });
+    expect(result.warnings).toEqual([
+      {
+        code: 'secret_default',
+        path: 'credentials.token',
+        file: 'config.yaml',
+        message: 'Secret field has a compiled default',
+      },
+    ]);
+    expect(result.errors).toEqual([]);
+    expect(JSON.stringify(result.warnings)).not.toContain('inline-secret');
+    expect(JSON.stringify(result.warnings)).not.toContain('file-secret');
+  });
+
   test.each(['__proto__', 'constructor', 'prototype'] as const)(
     'rejects prototype-pollution defaults key %s',
     (key) => {

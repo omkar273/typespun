@@ -12,6 +12,10 @@ import { readAnnotations, typespunSymbols } from './annotations.js';
 import { locationOf, sortDiagnostics } from './diagnostic.js';
 import { evaluateDefault } from './default-expression.js';
 
+function isJavaScriptSource(node: ts.Node): boolean {
+  return /\.(?:[cm]?js|jsx)$/i.test(node.getSourceFile().fileName);
+}
+
 export function analyzeProgram(
   program: ts.Program,
   inputPath: string,
@@ -38,6 +42,14 @@ export function analyzeProgram(
         },
       ],
     };
+  if (isJavaScriptSource(source)) {
+    report(
+      'javascript_schema',
+      'JavaScript schema declarations are not supported.',
+      source,
+    );
+    return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
+  }
   const moduleSymbol = checker.getSymbolAtLocation(source);
   const moduleExports = moduleSymbol
     ? checker.getExportsOfModule(moduleSymbol)
@@ -177,6 +189,16 @@ export function analyzeProgram(
   }
   const validatedHeritage = new Set<ts.Declaration>();
   function validateHeritage(type: ts.Type): void {
+    const javaScriptDeclaration =
+      type.symbol?.declarations?.find(isJavaScriptSource);
+    if (javaScriptDeclaration) {
+      report(
+        'javascript_schema',
+        'JavaScript schema declarations are not supported.',
+        javaScriptDeclaration,
+      );
+      return;
+    }
     for (const declaration of type.symbol?.declarations ?? []) {
       if (
         !ts.isInterfaceDeclaration(declaration) ||
@@ -200,6 +222,16 @@ export function analyzeProgram(
     }
   }
   validateHeritage(rootType);
+  if (
+    checker.getPropertiesOfType(rootType).length === 0 &&
+    diagnostics.length === 0
+  ) {
+    report(
+      'unsupported_type',
+      'Empty object configuration shapes are not supported.',
+      root,
+    );
+  }
   function kindOf(type: ts.Type): FieldKind | undefined {
     if (type.flags & ts.TypeFlags.String) return { type: 'string' };
     if (type.flags & ts.TypeFlags.Number) return { type: 'number' };
@@ -321,6 +353,14 @@ export function analyzeProgram(
     for (const property of checker.getPropertiesOfType(type)) {
       const node = property.valueDeclaration ?? property.declarations?.[0];
       if (!node || invalidMembers.has(node)) continue;
+      if (isJavaScriptSource(node)) {
+        report(
+          'javascript_schema',
+          'JavaScript schema declarations are not supported.',
+          node,
+        );
+        continue;
+      }
       const annotations = annotationsFor(node);
       if (annotations.ignore) continue;
       const name = property.getName();
@@ -433,6 +473,16 @@ export function analyzeProgram(
         continue;
       }
       if (optional) propertyType = checker.getNonNullableType(propertyType);
+      const javaScriptDeclaration =
+        propertyType.symbol?.declarations?.find(isJavaScriptSource);
+      if (javaScriptDeclaration) {
+        report(
+          'javascript_schema',
+          'JavaScript schema declarations are not supported.',
+          javaScriptDeclaration,
+        );
+        continue;
+      }
       const kind = kindOf(propertyType);
       const defaultsKey = JSON.stringify(currentDefaultsPath);
       if (defaultsPaths.has(defaultsKey)) {
@@ -462,6 +512,14 @@ export function analyzeProgram(
           report(
             'recursive_type',
             'Circular configuration shapes are not supported.',
+            node,
+          );
+          continue;
+        }
+        if (checker.getPropertiesOfType(propertyType).length === 0) {
+          report(
+            'unsupported_type',
+            'Empty object configuration shapes are not supported.',
             node,
           );
           continue;

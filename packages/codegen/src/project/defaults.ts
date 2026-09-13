@@ -46,26 +46,10 @@ export function compileDefaults(
   const warnings: DefaultsDiagnostic[] = [];
   const errors: DefaultsDiagnostic[] = [];
   const values: Record<string, unknown> = {};
+  const compiledPaths = new Set<string>();
   const fieldByDefaultsPath = new Map(
     fields.map((field) => [toPathKey(field.defaultsPath), field]),
   );
-
-  for (const field of fields) {
-    if (field.hasDefault && field.defaultValue !== undefined) {
-      if (
-        !setValue(values, field.propertyPath, cloneValue(field.defaultValue))
-      ) {
-        errors.push(
-          diagnostic(
-            'unsafe_defaults_key',
-            field.propertyPath,
-            document.path,
-            'Defaults path contains an unsafe key',
-          ),
-        );
-      }
-    }
-  }
 
   const parsed = parseDefaultsDocument(document, errors);
   if (!isRecord(parsed)) {
@@ -79,6 +63,14 @@ export function compileDefaults(
         ),
       );
     }
+    applyInlineDefaults(
+      fields,
+      compiledPaths,
+      policies,
+      values,
+      warnings,
+      errors,
+    );
     return { values, warnings, errors };
   }
 
@@ -90,6 +82,16 @@ export function compileDefaults(
     fields,
     policies,
     document.path,
+    values,
+    warnings,
+    errors,
+    compiledPaths,
+  );
+
+  applyInlineDefaults(
+    fields,
+    compiledPaths,
+    policies,
     values,
     warnings,
     errors,
@@ -163,6 +165,7 @@ function walkDefaults(
   values: Record<string, unknown>,
   warnings: DefaultsDiagnostic[],
   errors: DefaultsDiagnostic[],
+  compiledPaths: Set<string>,
 ): void {
   for (const [key, child] of Object.entries(value)) {
     const childPath = [...path, key];
@@ -181,6 +184,7 @@ function walkDefaults(
         values,
         warnings,
         errors,
+        compiledPaths,
       );
       continue;
     }
@@ -207,6 +211,7 @@ function walkDefaults(
         values,
         warnings,
         errors,
+        compiledPaths,
       );
       continue;
     }
@@ -277,7 +282,9 @@ function compileField(
   values: Record<string, unknown>,
   warnings: DefaultsDiagnostic[],
   errors: DefaultsDiagnostic[],
+  compiledPaths: Set<string>,
 ): void {
+  compiledPaths.add(toPathKey(field.propertyPath));
   const validationMessage = validateTypedValue(field.kind, value);
   if (validationMessage !== undefined) {
     errors.push(
@@ -324,6 +331,60 @@ function compileField(
         'Defaults path contains an unsafe key',
       ),
     );
+  }
+}
+
+function applyInlineDefaults(
+  fields: readonly FieldIR[],
+  compiledPaths: ReadonlySet<string>,
+  policies: CompileDefaultsPolicies,
+  values: Record<string, unknown>,
+  warnings: DefaultsDiagnostic[],
+  errors: DefaultsDiagnostic[],
+): void {
+  for (const field of fields) {
+    if (
+      !field.hasDefault ||
+      field.defaultValue === undefined ||
+      compiledPaths.has(toPathKey(field.propertyPath))
+    ) {
+      continue;
+    }
+
+    if (field.secret) {
+      if (policies.secretDefaults === 'error') {
+        errors.push(
+          diagnostic(
+            'secret_default',
+            field.defaultsPath,
+            field.location.file,
+            'Secret fields cannot have inline defaults',
+          ),
+        );
+        continue;
+      }
+      if (policies.secretDefaults === 'warn') {
+        warnings.push(
+          diagnostic(
+            'secret_default',
+            field.defaultsPath,
+            field.location.file,
+            'Secret field has an inline default',
+          ),
+        );
+      }
+    }
+
+    if (!setValue(values, field.propertyPath, cloneValue(field.defaultValue))) {
+      errors.push(
+        diagnostic(
+          'unsafe_defaults_key',
+          field.defaultsPath,
+          field.location.file,
+          'Defaults path contains an unsafe key',
+        ),
+      );
+    }
   }
 }
 

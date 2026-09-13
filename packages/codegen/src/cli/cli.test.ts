@@ -92,7 +92,9 @@ export interface AppConfig {
     const result = await runCli(project, 'generate');
 
     expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain('config.yaml:1:1');
     expect(result.stderr).toContain('secret_default');
+    expect(result.stderr).toContain('path token');
     expect(result.stderr).not.toContain('never-print-this');
   });
 });

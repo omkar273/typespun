@@ -4,6 +4,7 @@ import ts from 'typescript';
 /** Creates a real checker program with virtual schema files and real package imports. */
 export function createTestProgram(
   files: Readonly<Record<string, string>>,
+  compilerOptions: ts.CompilerOptions = {},
 ): ts.Program {
   const options: ts.CompilerOptions = {
     strict: true,
@@ -13,6 +14,7 @@ export function createTestProgram(
     experimentalDecorators: true,
     skipLibCheck: true,
     noEmit: true,
+    ...compilerOptions,
   };
   const contents = new Map(
     Object.entries(files).map(([name, text]) => [path.resolve(name), text]),
