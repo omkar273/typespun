@@ -3,8 +3,12 @@ import type { FieldKind } from '../schema.js';
 
 export function coerceEnvironmentValue(
   kind: FieldKind,
-  value: string,
+  value: unknown,
 ): { value: unknown } | { error: string } {
+  if (typeof value !== 'string') {
+    return { error: 'Expected an environment string' };
+  }
+
   switch (kind.type) {
     case 'string':
       return { value };
@@ -18,11 +22,12 @@ export function coerceEnvironmentValue(
 
       return typedResult(kind, Number(value));
     case 'boolean':
-      if (value !== 'true' && value !== 'false') {
+      const normalized = value.toLowerCase();
+      if (normalized !== 'true' && normalized !== 'false') {
         return { error: 'Expected a boolean' };
       }
 
-      return { value: value === 'true' };
+      return { value: normalized === 'true' };
     case 'enum':
       return typedResult(kind, value);
     case 'array':

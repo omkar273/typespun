@@ -39,9 +39,16 @@ export function validateTypedValue(
         return `Expected an array of ${kind.element}`;
       }
 
-      return value.every((item) => isArrayElement(kind.element, item))
-        ? undefined
-        : `Expected an array of ${kind.element}`;
+      for (let index = 0; index < value.length; index += 1) {
+        if (
+          !Object.hasOwn(value, index) ||
+          !isArrayElement(kind.element, value[index])
+        ) {
+          return `Expected an array of ${kind.element}`;
+        }
+      }
+
+      return undefined;
   }
 }
 

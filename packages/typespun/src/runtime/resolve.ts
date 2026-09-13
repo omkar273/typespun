@@ -42,6 +42,7 @@ export function resolveConfig<T>(
   const fieldPaths = new Set(
     fields.map((field) => formatPath(field.propertyPath)),
   );
+  const containerPaths = collectContainerPaths(fields);
   for (const entry of overrideEntries) {
     const path = formatPath(entry.path);
     if (hasUnsafePathSegment(entry.path)) {
@@ -51,7 +52,11 @@ export function resolveConfig<T>(
           'Override path contains an unsafe segment',
         ),
       );
-    } else if (!fieldPaths.has(path)) {
+    } else if (
+      entry.kind === 'cycle' ||
+      (!fieldPaths.has(path) &&
+        !(entry.kind === 'container' && containerPaths.has(path)))
+    ) {
       issues.push({
         code: 'unknown_override',
         path,
@@ -73,12 +78,24 @@ export function resolveConfig<T>(
       }
     }
   }
+  for (const entry of overrideEntries) {
+    const path = formatPath(entry.path);
+    if (entry.kind === 'container' && containerPaths.has(path)) {
+      for (const field of fields) {
+        for (const parent of field.optionalParents) {
+          if (isPathPrefix(parent, entry.path)) {
+            activeParents.add(formatPath(parent));
+          }
+        }
+      }
+    }
+  }
 
   const resolved: { field: FieldSchema; value: unknown }[] = [];
   for (const { field, candidate } of selections) {
     if (candidate !== undefined) {
       const result = candidate.environmentValue
-        ? coerceEnvironmentValue(field.kind, candidate.value as string)
+        ? coerceEnvironmentValue(field.kind, candidate.value)
         : validateTypedCandidate(field.kind, candidate.value);
       if ('error' in result) {
         issues.push(invalidValueIssue(field, candidate, result.error));
@@ -100,6 +117,16 @@ export function resolveConfig<T>(
   }
 
   const output = Object.create(null) as Record<string, unknown>;
+  for (const path of containersToReconstruct(fields, activeParents)) {
+    if (!setOwnPath(output, path, Object.create(null))) {
+      throw new ConfigError([
+        incompatibleSchemaIssue(
+          formatPath(path),
+          'Schema paths cannot be reconstructed safely',
+        ),
+      ]);
+    }
+  }
   for (const { field, value } of resolved) {
     if (!setOwnPath(output, field.propertyPath, value)) {
       throw new ConfigError([
@@ -184,7 +211,9 @@ function findCandidate<T>(
   }
 
   if (options.source !== undefined) {
-    const value = options.source[field.envName];
+    const value = Object.hasOwn(options.source, field.envName)
+      ? options.source[field.envName]
+      : undefined;
     if (value !== undefined) {
       return { source: 'source', value, environmentValue: true };
     }
@@ -251,9 +280,75 @@ function invalidValueIssue(
     path: formatPath(field.propertyPath),
     source: candidate.source,
     envKey: field.envName,
-    message,
+    message: field.secret ? 'Invalid value for secret field' : message,
     ...(field.secret ? {} : { received: candidate.value }),
   };
+}
+
+function collectContainerPaths(
+  fields: readonly FieldSchema[],
+): ReadonlySet<string> {
+  const paths = new Set<string>();
+  for (const field of fields) {
+    for (let length = 1; length < field.propertyPath.length; length += 1) {
+      paths.add(formatPath(field.propertyPath.slice(0, length)));
+    }
+  }
+  return paths;
+}
+
+function containersToReconstruct(
+  fields: readonly FieldSchema[],
+  activeParents: ReadonlySet<string>,
+): readonly (readonly string[])[] {
+  const optionalPaths = new Set(
+    fields.flatMap((field) =>
+      field.optionalParents.map((path) => formatPath(path)),
+    ),
+  );
+  const containers = new Map<string, readonly string[]>();
+
+  for (const field of fields) {
+    for (let length = 1; length < field.propertyPath.length; length += 1) {
+      const path = field.propertyPath.slice(0, length);
+      const formatted = formatPath(path);
+      if (
+        (optionalPaths.has(formatted) && !activeParents.has(formatted)) ||
+        !optionalAncestorsAreActive(path, optionalPaths, activeParents)
+      ) {
+        continue;
+      }
+      containers.set(formatted, path);
+    }
+  }
+
+  return [...containers.values()].sort(
+    (left, right) => left.length - right.length,
+  );
+}
+
+function optionalAncestorsAreActive(
+  path: readonly string[],
+  optionalPaths: ReadonlySet<string>,
+  activeParents: ReadonlySet<string>,
+): boolean {
+  for (let length = 1; length <= path.length; length += 1) {
+    const ancestor = formatPath(path.slice(0, length));
+    if (optionalPaths.has(ancestor) && !activeParents.has(ancestor)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isPathPrefix(
+  prefix: readonly string[],
+  path: readonly string[],
+): boolean {
+  return (
+    prefix.length <= path.length &&
+    prefix.every((segment, index) => path[index] === segment)
+  );
 }
 
 function incompatibleSchemaIssue(path: string, message: string): ConfigIssue {

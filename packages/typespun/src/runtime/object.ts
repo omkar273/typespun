@@ -3,6 +3,7 @@ const unsafeSegments = new Set(['__proto__', 'prototype', 'constructor']);
 export interface OverrideEntry {
   readonly path: readonly string[];
   readonly value: unknown;
+  readonly kind: 'value' | 'container' | 'cycle';
 }
 
 export function hasUnsafePathSegment(path: readonly string[]): boolean {
@@ -61,7 +62,7 @@ export function collectOverrideEntries(
   value: unknown,
 ): readonly OverrideEntry[] {
   const entries: OverrideEntry[] = [];
-  visit(value, [], entries);
+  visit(value, [], entries, new Set<object>());
   return entries;
 }
 
@@ -69,23 +70,31 @@ function visit(
   value: unknown,
   path: readonly string[],
   entries: OverrideEntry[],
+  ancestors: Set<object>,
 ): void {
   if (!isRecord(value) || Array.isArray(value)) {
     if (path.length > 0 && value !== undefined) {
-      entries.push({ path, value });
+      entries.push({ path, value, kind: 'value' });
     }
+    return;
+  }
+
+  if (ancestors.has(value)) {
+    entries.push({ path, value: undefined, kind: 'cycle' });
     return;
   }
 
   const keys = Object.keys(value);
   if (keys.length === 0 && path.length > 0) {
-    entries.push({ path, value });
+    entries.push({ path, value, kind: 'container' });
     return;
   }
 
+  ancestors.add(value);
   for (const key of keys) {
-    visit(value[key], [...path, key], entries);
+    visit(value[key], [...path, key], entries, ancestors);
   }
+  ancestors.delete(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

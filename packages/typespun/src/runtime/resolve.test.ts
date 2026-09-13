@@ -122,6 +122,15 @@ describe('createLoader', () => {
     ]);
   });
 
+  test('coerces boolean environment values case-insensitively', () => {
+    expect(load({ source: validSource({ ENABLED: 'TRUE' }) }).enabled).toBe(
+      true,
+    );
+    expect(load({ source: validSource({ ENABLED: 'False' }) }).enabled).toBe(
+      false,
+    );
+  });
+
   test('rejects enum values outside the declared members', () => {
     const error = getConfigError(() =>
       load({ source: validSource({ MODE: 'test' }) }),
@@ -303,6 +312,34 @@ describe('createLoader', () => {
     ]);
     expect(error.issues[0]).not.toHaveProperty('received');
     expect(JSON.stringify(error)).not.toContain('supplied-secret-token');
+    expect(JSON.stringify(error)).not.toContain('expected-token');
+  });
+
+  test('reads explicit sources through own properties only', () => {
+    const inherited = Object.create(validSource()) as Record<string, string>;
+    const error = getConfigError(() => load({ source: inherited }));
+
+    expect(error.issues.map((issue) => issue.code)).toEqual([
+      'missing_value',
+      'missing_value',
+      'missing_value',
+      'missing_value',
+      'missing_value',
+    ]);
+  });
+
+  test('rejects non-string values supplied through the runtime source boundary', () => {
+    const error = getConfigError(() =>
+      load({ source: { ...validSource(), PORT: 4000 } as never }),
+    );
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({
+        code: 'invalid_value',
+        path: 'port',
+        source: 'source',
+      }),
+    ]);
   });
 
   test('leaves an optional object absent when none of its descendants resolve', () => {
@@ -336,6 +373,80 @@ describe('createLoader', () => {
 
     expect(error.issues).toEqual([
       expect.objectContaining({ code: 'missing_value', path: 'database.port' }),
+    ]);
+  });
+
+  test('reconstructs required object containers that only have optional children', () => {
+    const loadDatabase = createLoader<{ database: { host?: string } }>(
+      requiredDatabaseSchema,
+    );
+
+    expect(loadDatabase({ source: {} })).toEqual({ database: {} });
+  });
+
+  test('reconstructs required nested containers when their optional ancestor is active', () => {
+    const loadFeatures = createLoader<{
+      features?: { enabled?: boolean; database: { host?: string } };
+    }>(requiredNestedContainerSchema);
+
+    expect(loadFeatures({ source: { FEATURES_ENABLED: 'true' } })).toEqual({
+      features: { enabled: true, database: {} },
+    });
+  });
+
+  test('accepts empty known override containers without hiding lower sources', () => {
+    const loadDatabase = createLoader<{
+      database?: { host: string; port: number };
+    }>(optionalDatabaseSchema);
+
+    expect(
+      loadDatabase({
+        source: { DATABASE_HOST: 'db.internal', DATABASE_PORT: '5432' },
+        overrides: { database: {} },
+      }),
+    ).toEqual({ database: { host: 'db.internal', port: 5432 } });
+  });
+
+  test('activates optional ancestors for an explicit nested empty container', () => {
+    const loadFeatures = createLoader<{
+      features?: { enabled?: boolean; database: { host?: string } };
+    }>(requiredNestedContainerSchema);
+
+    expect(
+      loadFeatures({
+        source: {},
+        overrides: { features: { database: {} } },
+      }),
+    ).toEqual({ features: { database: {} } });
+  });
+
+  test('reports cyclic override objects as configuration issues', () => {
+    const overrides: Record<string, unknown> = {};
+    overrides.database = overrides;
+    const loadDatabase = createLoader<{
+      database?: { host: string; port: number };
+    }>(optionalDatabaseSchema);
+    const error = getConfigError(() =>
+      loadDatabase({ source: {}, overrides: overrides as never }),
+    );
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({
+        code: 'unknown_override',
+        path: 'database',
+      }),
+    ]);
+  });
+
+  test('rejects sparse typed arrays', () => {
+    const sparseOrigins: string[] = [];
+    sparseOrigins.length = 1;
+    const error = getConfigError(() =>
+      load({ source: validSource(), overrides: { origins: sparseOrigins } }),
+    );
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({ code: 'invalid_value', path: 'origins' }),
     ]);
   });
 
@@ -443,6 +554,48 @@ const reverseOptionalDatabaseSchema = {
       secret: false,
       hasDefault: false,
       optionalParents: [['database']],
+    },
+  ],
+} as const satisfies GeneratedSchema;
+
+const requiredDatabaseSchema = {
+  protocolVersion: 1,
+  fields: [
+    {
+      propertyPath: ['database', 'host'],
+      defaultsPath: ['database', 'host'],
+      envName: 'DATABASE_HOST',
+      kind: { type: 'string' },
+      required: false,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [],
+    },
+  ],
+} as const satisfies GeneratedSchema;
+
+const requiredNestedContainerSchema = {
+  protocolVersion: 1,
+  fields: [
+    {
+      propertyPath: ['features', 'enabled'],
+      defaultsPath: ['features', 'enabled'],
+      envName: 'FEATURES_ENABLED',
+      kind: { type: 'boolean' },
+      required: false,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [['features']],
+    },
+    {
+      propertyPath: ['features', 'database', 'host'],
+      defaultsPath: ['features', 'database', 'host'],
+      envName: 'FEATURES_DATABASE_HOST',
+      kind: { type: 'string' },
+      required: false,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [['features']],
     },
   ],
 } as const satisfies GeneratedSchema;
