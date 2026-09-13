@@ -1,0 +1,402 @@
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { loadProjectConfig } from './config.js';
+import { compileDefaults } from './defaults.js';
+import { discoverDefaultsPath } from './discovery.js';
+import type { FieldIR } from '../contracts.js';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+function createProject(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'typespun-project-'));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+function writeProjectFile(
+  projectDirectory: string,
+  relativePath: string,
+  contents = '',
+): string {
+  const path = join(projectDirectory, relativePath);
+  mkdirSync(join(path, '..'), { recursive: true });
+  writeFileSync(path, contents);
+  return path;
+}
+
+describe('project discovery', () => {
+  test('finds the sole conventional TypeScript input without a config file', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'src/config.ts',
+      'export interface Config {}',
+    );
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+
+    const result = loadProjectConfig({ projectDirectory });
+
+    expect(result.inputPath).toBe(resolve(projectDirectory, 'src/config.ts'));
+    expect(result.outputPath).toBe(
+      resolve(projectDirectory, 'src/generated/typespun.ts'),
+    );
+    expect(result.tsconfigPath).toBe(
+      resolve(projectDirectory, 'tsconfig.json'),
+    );
+    expect(result.defaultsPath).toBeUndefined();
+  });
+
+  test.each([
+    ['src/config.mts', 'src/generated/typespun.mts'],
+    ['src/config.cts', 'src/generated/typespun.cts'],
+  ])('mirrors %s in its default output extension', (input, output) => {
+    const projectDirectory = createProject();
+    writeProjectFile(projectDirectory, input, 'export interface Config {}');
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+
+    const result = loadProjectConfig({ projectDirectory });
+
+    expect(result.outputPath).toBe(resolve(projectDirectory, output));
+  });
+
+  test('rejects projects without a conventional schema candidate', () => {
+    const projectDirectory = createProject();
+
+    expect(() => loadProjectConfig({ projectDirectory })).toThrow(
+      'exactly one conventional input',
+    );
+  });
+
+  test('rejects projects with multiple conventional schema candidates', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(projectDirectory, 'src/config.ts');
+    writeProjectFile(projectDirectory, 'src/config.mts');
+
+    expect(() => loadProjectConfig({ projectDirectory })).toThrow(
+      'exactly one conventional input',
+    );
+  });
+
+  test('accepts no conventional defaults file', () => {
+    const projectDirectory = createProject();
+
+    expect(discoverDefaultsPath(projectDirectory)).toBeUndefined();
+  });
+
+  test.each([
+    'config.yaml',
+    'config.yml',
+    'config.json',
+    'config/config.yaml',
+    'config/config.yml',
+    'config/config.json',
+    'src/config.yaml',
+    'src/config.yml',
+    'src/config.json',
+  ])('accepts one conventional defaults file at %s', (candidate) => {
+    const projectDirectory = createProject();
+    const expected = writeProjectFile(projectDirectory, candidate, '{}');
+
+    expect(discoverDefaultsPath(projectDirectory)).toBe(expected);
+  });
+
+  test('rejects ambiguous conventional defaults files', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(projectDirectory, 'config.yaml', '{}');
+    writeProjectFile(projectDirectory, 'src/config.json', '{}');
+
+    expect(() => discoverDefaultsPath(projectDirectory)).toThrow(
+      'Multiple conventional defaults files',
+    );
+  });
+});
+
+describe('project configuration', () => {
+  test('resolves strict configuration paths and normalizes policy values', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'schema/config.mts',
+      'export interface Config {}',
+    );
+    writeProjectFile(projectDirectory, 'compiler/tsconfig.json', '{}');
+    writeProjectFile(
+      projectDirectory,
+      'typespun.json',
+      JSON.stringify({
+        input: 'schema/config.mts',
+        output: 'build/typespun.cts',
+        tsconfig: 'compiler/tsconfig.json',
+        envPrefix: 'APP_',
+        defaults: { path: 'settings/defaults.yaml', unknownKeys: 'ignore' },
+        secretDefaults: 'allow',
+      }),
+    );
+
+    const result = loadProjectConfig({ projectDirectory });
+
+    expect(result.inputPath).toBe(
+      resolve(projectDirectory, 'schema/config.mts'),
+    );
+    expect(result.outputPath).toBe(
+      resolve(projectDirectory, 'build/typespun.cts'),
+    );
+    expect(result.tsconfigPath).toBe(
+      resolve(projectDirectory, 'compiler/tsconfig.json'),
+    );
+    expect(result.defaultsPath).toBe(
+      resolve(projectDirectory, 'settings/defaults.yaml'),
+    );
+    expect(result.envPrefix).toBe('APP');
+    expect(result.unknownKeys).toBe('ignore');
+    expect(result.secretDefaults).toBe('allow');
+  });
+
+  test('discovers defaults and the nearest tsconfig when config options omit paths', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'schema/nested/config.ts',
+      'export interface Config {}',
+    );
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+    writeProjectFile(projectDirectory, 'config.yml', '{}');
+    writeProjectFile(
+      projectDirectory,
+      'typespun.json',
+      JSON.stringify({
+        input: 'schema/nested/config.ts',
+        defaults: { unknownKeys: 'warn' },
+      }),
+    );
+
+    const result = loadProjectConfig({ projectDirectory });
+
+    expect(result.tsconfigPath).toBe(
+      resolve(projectDirectory, 'tsconfig.json'),
+    );
+    expect(result.defaultsPath).toBe(resolve(projectDirectory, 'config.yml'));
+    expect(result.unknownKeys).toBe('warn');
+    expect(result.secretDefaults).toBe('warn');
+  });
+
+  test.each([
+    [
+      'unknown top-level key',
+      { unsupported: true },
+      'Unknown typespun.json key',
+    ],
+    [
+      'unknown defaults key',
+      { defaults: { unsupported: true } },
+      'Unknown defaults key',
+    ],
+    [
+      'invalid unknown-key policy',
+      { defaults: { unknownKeys: 'log' } },
+      'unknownKeys',
+    ],
+    [
+      'invalid secret-default policy',
+      { secretDefaults: 'silent' },
+      'secretDefaults',
+    ],
+    ['invalid output extension', { output: 'generated.js' }, 'output'],
+  ])('rejects %s', (_name, configuration, message) => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'src/config.ts',
+      'export interface Config {}',
+    );
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+    writeProjectFile(
+      projectDirectory,
+      'typespun.json',
+      JSON.stringify(configuration),
+    );
+
+    expect(() => loadProjectConfig({ projectDirectory })).toThrow(message);
+  });
+});
+
+const fields: readonly FieldIR[] = [
+  {
+    propertyPath: ['server', 'host'],
+    defaultsPath: ['server', 'host'],
+    envName: 'APP_HOST',
+    kind: { type: 'string' },
+    required: true,
+    secret: false,
+    hasDefault: true,
+    defaultValue: 'localhost',
+    optionalParents: [],
+    location: { file: 'config.ts', line: 1, column: 1 },
+  },
+  {
+    propertyPath: ['server', 'port'],
+    defaultsPath: ['server', 'port'],
+    envName: 'APP_PORT',
+    kind: { type: 'number' },
+    required: true,
+    secret: false,
+    hasDefault: true,
+    defaultValue: 3000,
+    optionalParents: [],
+    location: { file: 'config.ts', line: 2, column: 1 },
+  },
+  {
+    propertyPath: ['features', 'tags'],
+    defaultsPath: ['features', 'tags'],
+    envName: 'APP_TAGS',
+    kind: { type: 'array', element: 'string' },
+    required: false,
+    secret: false,
+    hasDefault: false,
+    optionalParents: [],
+    location: { file: 'config.ts', line: 3, column: 1 },
+  },
+  {
+    propertyPath: ['credentials', 'token'],
+    defaultsPath: ['credentials', 'token'],
+    envName: 'APP_TOKEN',
+    kind: { type: 'string' },
+    required: true,
+    secret: true,
+    hasDefault: false,
+    optionalParents: [],
+    location: { file: 'config.ts', line: 4, column: 1 },
+  },
+];
+
+describe('compiled defaults', () => {
+  test('maps nested JSON defaults by defaultsPath over inline field defaults', () => {
+    const result = compileDefaults(
+      {
+        path: 'config.json',
+        content:
+          '{"server":{"port":8080},"features":{"tags":["alpha","beta"]}}',
+      },
+      fields,
+      { unknownKeys: 'error', secretDefaults: 'allow' },
+    );
+
+    expect(result.values).toEqual({
+      server: { host: 'localhost', port: 8080 },
+      features: { tags: ['alpha', 'beta'] },
+    });
+    expect(result.warnings).toEqual([]);
+    expect(result.errors).toEqual([]);
+  });
+
+  test.each([
+    ['error', 0, 1],
+    ['warn', 1, 0],
+    ['ignore', 0, 0],
+  ] as const)(
+    'handles unknown YAML paths with the %s policy',
+    (unknownKeys, warningCount, errorCount) => {
+      const result = compileDefaults(
+        {
+          path: 'config.yaml',
+          content: 'server:\n  port: 8080\n  unsupported: true\n',
+        },
+        fields,
+        { unknownKeys, secretDefaults: 'allow' },
+      );
+
+      expect(result.values).toEqual({
+        server: { host: 'localhost', port: 8080 },
+      });
+      expect(result.warnings).toHaveLength(warningCount);
+      expect(result.errors).toHaveLength(errorCount);
+      for (const diagnostic of [...result.warnings, ...result.errors]) {
+        expect(diagnostic.path).toBe('server.unsupported');
+        expect(JSON.stringify(diagnostic)).not.toContain('true');
+      }
+    },
+  );
+
+  test('validates scalar and array YAML defaults without exposing supplied values', () => {
+    const result = compileDefaults(
+      {
+        path: 'config.yaml',
+        content:
+          'server:\n  port: invalid-port\nfeatures:\n  tags: [alpha, 99]\n',
+      },
+      fields,
+      { unknownKeys: 'error', secretDefaults: 'allow' },
+    );
+
+    expect(result.errors.map((diagnostic) => diagnostic.path)).toEqual([
+      'server.port',
+      'features.tags',
+    ]);
+    expect(JSON.stringify(result.errors)).not.toContain('invalid-port');
+    expect(JSON.stringify(result.errors)).not.toContain('99');
+  });
+
+  test.each([
+    [
+      'warn',
+      1,
+      0,
+      {
+        server: { host: 'localhost', port: 3000 },
+        credentials: { token: 'shh' },
+      },
+    ],
+    [
+      'allow',
+      0,
+      0,
+      {
+        server: { host: 'localhost', port: 3000 },
+        credentials: { token: 'shh' },
+      },
+    ],
+    ['error', 0, 1, { server: { host: 'localhost', port: 3000 } }],
+  ] as const)(
+    'applies the %s secret-default policy',
+    (secretDefaults, warningCount, errorCount, expectedValues) => {
+      const result = compileDefaults(
+        { path: 'config.json', content: '{"credentials":{"token":"shh"}}' },
+        fields,
+        { unknownKeys: 'error', secretDefaults },
+      );
+
+      expect(result.values).toEqual(expectedValues);
+      expect(result.warnings).toHaveLength(warningCount);
+      expect(result.errors).toHaveLength(errorCount);
+      for (const diagnostic of [...result.warnings, ...result.errors]) {
+        expect(diagnostic.path).toBe('credentials.token');
+        expect(JSON.stringify(diagnostic)).not.toContain('shh');
+      }
+    },
+  );
+
+  test.each(['__proto__', 'constructor', 'prototype'] as const)(
+    'rejects prototype-pollution defaults key %s',
+    (key) => {
+      const result = compileDefaults(
+        { path: 'config.json', content: `{"${key}":{"token":"shh"}}` },
+        fields,
+        { unknownKeys: 'error', secretDefaults: 'allow' },
+      );
+
+      expect(result.errors.map((diagnostic) => diagnostic.path)).toEqual([key]);
+      expect(result.values).toEqual({
+        server: { host: 'localhost', port: 3000 },
+      });
+      expect(({} as { token?: string }).token).toBeUndefined();
+    },
+  );
+});
