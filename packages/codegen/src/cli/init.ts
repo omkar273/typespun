@@ -1,4 +1,10 @@
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import ts from 'typescript';
@@ -73,7 +79,7 @@ export async function initializeProject(
   if (pathsReferToSameFile(inputPath, outputPath)) {
     throw new InitProjectError('Schema input and generated output must differ');
   }
-  if (existsSync(outputPath) && !isTypespunGeneratedOutput(outputPath)) {
+  if (pathEntryExists(outputPath) && !isTypespunGeneratedOutput(outputPath)) {
     throw new InitProjectError(
       `Initialization refuses to overwrite the existing output at ${output}`,
     );
@@ -547,6 +553,15 @@ function isTypespunGeneratedOutput(path: string): boolean {
 function isFile(path: string): boolean {
   try {
     return existsSync(path) && statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function pathEntryExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
   } catch {
     return false;
   }

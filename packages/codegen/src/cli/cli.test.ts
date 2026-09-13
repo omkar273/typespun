@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
+  readlink,
   rm,
   symlink,
   writeFile,
@@ -281,6 +283,26 @@ describe('init', () => {
     expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
       validInterface,
     );
+  });
+
+  test('rejects and preserves a dangling generated-output symlink before mutation', async () => {
+    const project = await createBareProject();
+    await mkdir(join(project, 'src/generated'), { recursive: true });
+    const outputPath = join(project, 'src/generated/typespun.ts');
+    await symlink('../missing-generated.ts', outputPath);
+    const packageBefore = await readFile(join(project, 'package.json'), 'utf8');
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('refuses to overwrite');
+    expect((await lstat(outputPath)).isSymbolicLink()).toBe(true);
+    expect(await readlink(outputPath)).toBe('../missing-generated.ts');
+    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+      packageBefore,
+    );
+    expect(await Bun.file(join(project, 'typespun.json')).exists()).toBe(false);
+    expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
   });
 
   test('persists missing config paths so explicit flags cannot be ignored', async () => {
