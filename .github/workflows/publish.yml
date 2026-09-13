@@ -3,6 +3,11 @@ name: publish
 on:
   workflow_dispatch:
     inputs:
+      release-version:
+        description: 'Version to publish for both packages (for example, 0.0.1)'
+        required: false
+        default: ''
+        type: string
       npm-tag:
         description: 'npm dist-tag to use'
         required: false
@@ -40,6 +45,28 @@ jobs:
           else
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Resolve publish version
+        id: release
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.release-version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "No version provided. Pass release-version in workflow_dispatch or push a tag like v0.0.1."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set package versions
+        run: |
+          for package in packages/typespun packages/codegen; do
+            (cd "$package" && npm version --no-git-tag-version --allow-same-version "${{ steps.release.outputs.version }}")
+          done
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
