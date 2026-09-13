@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import {
   mkdir,
   open,
@@ -16,7 +17,10 @@ import {
   emitGeneratedModule,
   relativeTypeImportSpecifier,
 } from './emitter/emit.js';
-import { createFingerprint } from './emitter/fingerprint.js';
+import {
+  createFingerprint,
+  type FingerprintInput,
+} from './emitter/fingerprint.js';
 import {
   loadProjectConfig,
   type ProjectConfigResult,
@@ -26,9 +30,9 @@ import {
   type DefaultsDiagnostic,
 } from './project/defaults.js';
 
-const GENERATOR_VERSION = '0.0.0';
 const PROTOCOL_VERSION = 1;
 const TEMPORARY_ATTEMPTS = 8;
+const PACKAGE_JSON_URL = new URL('../package.json', import.meta.url);
 
 export interface GenerateProjectOptions {
   readonly configPath?: string;
@@ -131,9 +135,8 @@ export async function generateProject(
     fields: analysis.fields.map(withoutLocation),
     typeImport,
   };
-  const fingerprint = createFingerprint({
+  const fingerprint = createGenerationFingerprint({
     protocolVersion: PROTOCOL_VERSION,
-    generatorVersion: GENERATOR_VERSION,
     configuration: portableConfig,
     analysis: portableAnalysis,
     compiledDefaults: defaults.values,
@@ -172,6 +175,23 @@ export async function generateProject(
     warnings: defaults.warnings,
     diagnostics: [],
   };
+}
+
+export function createGenerationFingerprint(
+  input: Omit<FingerprintInput, 'generatorVersion'>,
+  packageJsonUrl: URL = PACKAGE_JSON_URL,
+): string {
+  const manifest: unknown = JSON.parse(readFileSync(packageJsonUrl, 'utf8'));
+  if (
+    typeof manifest !== 'object' ||
+    manifest === null ||
+    !('version' in manifest) ||
+    typeof manifest.version !== 'string' ||
+    manifest.version.length === 0
+  ) {
+    throw new Error('typespun-codegen package version is missing');
+  }
+  return createFingerprint({ ...input, generatorVersion: manifest.version });
 }
 
 function createProjectProgram(config: ProjectConfigResult): {

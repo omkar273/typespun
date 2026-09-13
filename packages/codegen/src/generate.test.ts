@@ -10,7 +10,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { atomicWrite, generateProject } from './generate.js';
+import { pathToFileURL } from 'node:url';
+import {
+  atomicWrite,
+  createGenerationFingerprint,
+  generateProject,
+} from './generate.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -59,6 +64,27 @@ export interface AppConfig {
 `;
 
 describe('project generation', () => {
+  test('package metadata version changes the generated schema fingerprint', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'typespun-version-'));
+    temporaryDirectories.push(directory);
+    const firstManifest = join(directory, 'first.json');
+    const secondManifest = join(directory, 'second.json');
+    writeFileSync(firstManifest, '{"version":"1.2.3"}');
+    writeFileSync(secondManifest, '{"version":"1.2.4"}');
+    const inputs = {
+      protocolVersion: 1,
+      configuration: { input: 'src/config.ts' },
+      analysis: { fields: [] },
+      compiledDefaults: {},
+    };
+
+    expect(
+      createGenerationFingerprint(inputs, pathToFileURL(firstManifest)),
+    ).not.toBe(
+      createGenerationFingerprint(inputs, pathToFileURL(secondManifest)),
+    );
+  });
+
   test('writes once and leaves unchanged output modification time intact', async () => {
     const projectDirectory = createProject();
     const outputPath = join(projectDirectory, 'src/generated/typespun.ts');

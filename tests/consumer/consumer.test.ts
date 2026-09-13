@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   packArtifacts,
   removePackedArtifacts,
   run,
-  workspaceRoot,
   type PackedArtifacts,
 } from '../package/pack.js';
 
@@ -96,10 +95,7 @@ void load;
     );
 
     expect(
-      run(
-        [join(workspaceRoot, 'node_modules/.bin/tsc'), '-p', 'tsconfig.json'],
-        consumerDirectory,
-      ),
+      run([installedBinary('tsc'), '-p', 'tsconfig.json'], consumerDirectory),
     ).toBe('');
   });
 
@@ -113,9 +109,119 @@ void load;
       'Usage: typespun',
     );
   });
+
+  test('installed CLI initializes, generates, checks, compiles, and runs an interface project', async () => {
+    const project = join(consumerDirectory!, 'projects/interface');
+    await createProject(project);
+    const bin = installedBinary('typespun');
+
+    expect(run([bin, 'init'], project)).toContain('Created src/config.ts.');
+    expect(run([bin, 'generate'], project)).toContain(
+      'Unchanged src/generated/typespun.ts.',
+    );
+    expect(run([bin, 'check'], project)).toContain('is up to date.');
+    await writeProjectFile(
+      project,
+      'src/index.ts',
+      `import { loadConfig } from './generated/typespun.js';
+console.log(loadConfig({ source: { PORT: '4321' } }).port);
+`,
+    );
+
+    run([installedBinary('tsc'), '-p', 'tsconfig.json'], project);
+    expect(run(['node', 'dist/index.js'], project)).toBe('4321\n');
+  });
+
+  test('installed CLI completes a partial class project before generate, check, compile, and execution', async () => {
+    const project = join(consumerDirectory!, 'projects/class');
+    await createProject(project, { keep: 'unchanged' });
+    await writeProjectFile(
+      project,
+      'typespun.json',
+      `${JSON.stringify({ input: 'src/config.ts' }, null, 2)}\n`,
+    );
+    const bin = installedBinary('typespun');
+
+    expect(
+      run(
+        [
+          bin,
+          'init',
+          '--style',
+          'class',
+          '--output',
+          'src/generated/typespun.ts',
+          '--env-prefix',
+          'APP',
+        ],
+        project,
+      ),
+    ).toContain('Created src/config.ts.');
+    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toContain(
+      '@Config()\nexport class AppConfig',
+    );
+    expect(run([bin, 'generate'], project)).toContain(
+      'Unchanged src/generated/typespun.ts.',
+    );
+    expect(run([bin, 'check'], project)).toContain('is up to date.');
+    await writeProjectFile(
+      project,
+      'src/index.ts',
+      `import { loadConfig } from './generated/typespun.js';
+console.log(loadConfig({ source: { APP_PORT: '3000' } }).port);
+`,
+    );
+
+    run([installedBinary('tsc'), '-p', 'tsconfig.json'], project);
+    expect(run(['node', 'dist/index.js'], project)).toBe('3000\n');
+  });
 });
 
 async function writeFixture(name: string, contents: string): Promise<void> {
   await mkdir(consumerDirectory!, { recursive: true });
   await writeFile(join(consumerDirectory!, name), contents);
+}
+
+function installedBinary(name: 'tsc' | 'typespun'): string {
+  return join(consumerDirectory!, 'node_modules/.bin', name);
+}
+
+async function createProject(
+  project: string,
+  scripts: Readonly<Record<string, string>> = {},
+): Promise<void> {
+  await writeProjectFile(
+    project,
+    'package.json',
+    `${JSON.stringify({ private: true, type: 'module', scripts }, null, 2)}\n`,
+  );
+  await writeProjectFile(
+    project,
+    'tsconfig.json',
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          outDir: 'dist',
+          rootDir: 'src',
+          strict: true,
+          target: 'ES2022',
+        },
+        include: ['src/**/*.ts'],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function writeProjectFile(
+  project: string,
+  relativePath: string,
+  contents: string,
+): Promise<void> {
+  const path = join(project, relativePath);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, contents);
 }

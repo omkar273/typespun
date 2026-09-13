@@ -50,6 +50,8 @@ describe('published package contents', () => {
     const codegen = archivedPackageJson(artifacts!.codegen);
     const codegenDependencies = codegen.dependencies as Record<string, string>;
     const runtimeDependencies = runtime.dependencies as Record<string, string>;
+    const runtimeEngines = runtime.engines as Record<string, string>;
+    const codegenEngines = codegen.engines as Record<string, string>;
 
     expect(runtime.private).toBeUndefined();
     expect(codegen.private).toBeUndefined();
@@ -59,5 +61,10 @@ describe('published package contents', () => {
     expect(runtimeDependencies).not.toHaveProperty('typescript');
     expect(runtimeDependencies).not.toHaveProperty('yaml');
     expect(runtimeDependencies).not.toHaveProperty('typespun-codegen');
+    expect(runtimeEngines).toEqual({
+      node: '>=22 <23 || >=24 <25',
+      bun: '>=1.4.1',
+    });
+    expect(codegenEngines).toEqual(runtimeEngines);
   });
 });
