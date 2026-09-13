@@ -156,6 +156,11 @@ describe('init', () => {
     expect(await readFile(join(project, 'config.yml'), 'utf8')).toBe(
       'port: 4000\n',
     );
+    const configText = await readFile(join(project, 'typespun.json'), 'utf8');
+    expect(configText).toContain(
+      'Optional defaults override. config.yml is discovered automatically.',
+    );
+    expect(configText).toContain('//   "path": "config.yml",');
   });
 
   test('supports class style and explicit paths without normalizing the requested prefix', async () => {
@@ -329,6 +334,38 @@ describe('init', () => {
     );
     expect(await Bun.file(join(project, 'typespun.json')).exists()).toBe(false);
     expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
+  });
+
+  test('rejects a dangling typespun.json symlink before creating scaffold files', async () => {
+    const project = await createBareProject();
+    const configPath = join(project, 'typespun.json');
+    await symlink('missing-typespun.json', configPath);
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('symbolic link');
+    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+    expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
+    expect(await Bun.file(join(project, 'config.yaml')).exists()).toBe(false);
+  });
+
+  test('rejects a symlinked package.json without changing its target', async () => {
+    const project = await createBareProject();
+    const targetDirectory = await makeDirectory();
+    const target = join(targetDirectory, 'shared-package.json');
+    const contents = '{"name":"shared"}\n';
+    await writeFile(target, contents);
+    await rm(join(project, 'package.json'));
+    await symlink(target, join(project, 'package.json'));
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('symbolic link');
+    expect(await readFile(target, 'utf8')).toBe(contents);
+    expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
+    expect(await Bun.file(join(project, 'config.yaml')).exists()).toBe(false);
   });
 
   test('persists missing config paths so explicit flags cannot be ignored', async () => {

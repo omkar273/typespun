@@ -59,9 +59,11 @@ export async function initializeProject(
 ): Promise<InitResult> {
   const projectDirectory = resolve(cwd);
   const packagePath = join(projectDirectory, 'package.json');
+  rejectMutableSymlink(packagePath, 'package.json');
   const packageDocument = readPackageDocument(packagePath);
 
   const configPath = join(projectDirectory, 'typespun.json');
+  rejectMutableSymlink(configPath, 'typespun.json');
   const existingConfig = existsSync(configPath)
     ? readInitConfig(configPath)
     : undefined;
@@ -131,7 +133,12 @@ export async function initializeProject(
   }
   const serializedConfig =
     existingConfig === undefined
-      ? serializeNewConfig(config)
+      ? serializeNewConfig(
+          config,
+          discoveredDefaults === undefined
+            ? 'config.yaml'
+            : displayPath(projectDirectory, discoveredDefaults),
+        )
       : `${JSON.stringify(config, null, 2)}\n`;
   if (existingConfig === undefined) {
     await writeNewFile(configPath, serializedConfig);
@@ -312,8 +319,7 @@ function readInitConfig(path: string): InitConfig {
   return value as InitConfig;
 }
 
-function serializeNewConfig(config: InitConfig): string {
-  const outputHasComma = config.envPrefix !== undefined;
+function serializeNewConfig(config: InitConfig, defaultsPath: string): string {
   const prefixLines =
     config.envPrefix === undefined
       ? [
@@ -322,7 +328,7 @@ function serializeNewConfig(config: InitConfig): string {
           '  // "envPrefix": "APP",',
         ]
       : [
-          `  "envPrefix": ${JSON.stringify(config.envPrefix)}`,
+          `  "envPrefix": ${JSON.stringify(config.envPrefix)},`,
           '',
           '  // Environment keys use the configured prefix, such as APP_PORT.',
         ];
@@ -330,15 +336,15 @@ function serializeNewConfig(config: InitConfig): string {
   return `${[
     '{',
     `  "input": ${JSON.stringify(config.input)},`,
-    `  "output": ${JSON.stringify(config.output)}${outputHasComma ? ',' : ''}`,
+    `  "output": ${JSON.stringify(config.output)},`,
     ...prefixLines,
     '',
     '  // Optional tsconfig override. Default: nearest tsconfig.json to the input.',
     '  // "tsconfig": "tsconfig.json",',
     '',
-    '  // Optional defaults override. config.yaml is discovered automatically.',
+    `  // Optional defaults override. ${defaultsPath} is discovered automatically.`,
     '  // "defaults": {',
-    '  //   "path": "config.yaml",',
+    `  //   "path": ${JSON.stringify(defaultsPath)},`,
     '  //   "unknownKeys": "error" // Allowed: "error", "warn", or "ignore".',
     '  // },',
     '',
@@ -631,6 +637,27 @@ function pathEntryExists(path: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+function rejectMutableSymlink(path: string, displayName: string): void {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      throw new InitProjectError(
+        `Initialization refuses to update the symbolic link at ${displayName}`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof InitProjectError) throw error;
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return;
+    }
+    throw new InitProjectError(`Could not inspect ${displayName}`);
   }
 }
 

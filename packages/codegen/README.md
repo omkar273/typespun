@@ -42,7 +42,8 @@ The default initialization creates, when missing:
 
 - `src/config.ts`, containing an `@typespun` interface with a numeric `port`
   field;
-- `config.yaml`, containing `port: 3000` for a runnable default;
+- `config.yaml`, containing `port: 3000` for a new starter schema or an empty
+  object when adopting an existing schema;
 - `typespun.json`, pointing from `src/config.ts` to
   `src/generated/typespun.ts`, with commented examples for every optional
   setting and allowed policy value; and
@@ -52,19 +53,28 @@ When both `typespun` and `typespun-codegen` resolve from the project or an
 ancestor `node_modules`, `init` also creates the first generated loader at
 `src/generated/typespun.ts`.
 
-If either dependency is missing, initialization still creates the other
-missing project files and exits successfully, but does not generate output. It
-prints install commands for the package manager selected by `packageManager`
-or a recognized lockfile (falling back to npm). It never runs an installer.
-If initialization was invoked before the dependencies were installed—for
-example with `bunx --package typespun-codegen typespun init`—install them and
-then generate:
+You can scaffold before installing either package with a package-qualified
+zero-install command:
+
+```sh
+bunx --package typespun-codegen typespun init
+npx --package=typespun-codegen typespun init
+```
+
+In that case, `init` creates the project files and exits successfully but does
+not generate output, because the dependencies are not installed in the project.
+It prints install commands for the manager selected by `packageManager` or a
+recognized lockfile, falling back to npm. It never runs an installer. Install
+both packages and generate:
 
 ```sh
 bun add typespun
 bun add --dev typespun-codegen
 bun run config:generate
 ```
+
+The installed `bun typespun init` and `npx typespun init` flows are shorter and
+generate immediately because both dependencies are already present.
 
 `init` preserves existing scripts and initialized files. Re-running it is
 byte-stable. It refuses conflicting options, input/output aliases, and an

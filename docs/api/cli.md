@@ -34,7 +34,9 @@ absent it prints manager-specific commands.
 
 `init` is idempotent for an initialized project. It refuses conflicting flags,
 input/output aliases, symlinks that alias them, and any output not recognizable
-as Typespun-generated. It does not offer a force-overwrite option.
+as Typespun-generated. It also rejects symlinked `package.json` and
+`typespun.json` files before mutation. It does not offer a force-overwrite
+option.
 
 ```sh
 typespun init --style class --env-prefix APP
