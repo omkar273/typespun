@@ -68,29 +68,50 @@ jobs:
       - name: Check workspace and packed artifacts
         run: bun run check
 
-      - name: Set package versions
+      - name: Prepare package versions for publish
         run: |
           VERSION="${{ steps.release.outputs.version }}"
+          export VERSION
+          node --input-type=module <<'EOF'
+          import { readFile, writeFile } from "node:fs/promises";
+          import { join } from "node:path";
 
-          for package in packages/typespun packages/codegen; do
-            (cd "$package" && npm version --no-git-tag-version --allow-same-version "$VERSION")
-          done
+          const pkgs = ["packages/typespun/package.json", "packages/codegen/package.json"];
 
-      - name: Prepare package manifests for publish
+          for (const pkg of pkgs) {
+            const path = join(process.cwd(), pkg);
+            const data = JSON.parse(await readFile(path, "utf8"));
+            data.version = process.env.VERSION;
+
+            if (pkg.endsWith("codegen/package.json") && data.dependencies?.typespun) {
+              data.dependencies.typespun = `^${process.env.VERSION}`;
+            }
+
+            await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
+          }
+          EOF
+
+      - name: Validate package versions
         run: |
-          VERSION="${{ steps.release.outputs.version }}"
-          (cd packages/codegen && npm pkg set dependencies.typespun="^$VERSION")
+          typespun_runtime_version=$(bun -e "console.log(require('./packages/typespun/package.json').version)")
+          typespun_codegen_version=$(bun -e "console.log(require('./packages/codegen/package.json').version)")
+          test "$typespun_runtime_version" = "${{ steps.release.outputs.version }}"
+          test "$typespun_codegen_version" = "${{ steps.release.outputs.version }}"
 
       - name: Prepare package archives
         run: mkdir -p .release
 
       - name: Pack typespun
         working-directory: packages/typespun
-        run: bun pm pack --filename ../../.release/typespun.tgz --ignore-scripts
+        run: |
+          bun pm pack --ignore-scripts
+          mv typespun-*.tgz ../../.release/typespun.tgz
 
       - name: Pack typespun-codegen
         working-directory: packages/codegen
-        run: bun pm pack --filename ../../.release/typespun-codegen.tgz --ignore-scripts
+        run: |
+          bun pm pack --ignore-scripts
+          mv typespun-codegen-*.tgz ../../.release/typespun-codegen.tgz
 
       - name: Publish typespun
         run: |
