@@ -19,6 +19,8 @@ export interface FieldIR extends FieldSchema {
 }
 
 export interface AnalyzeResult {
+  readonly inputPath: string;
+  readonly rootName?: string;
   readonly fields: readonly FieldIR[];
   readonly diagnostics: readonly Diagnostic[];
 }

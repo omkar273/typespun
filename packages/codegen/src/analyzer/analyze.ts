@@ -1,0 +1,431 @@
+import path from 'node:path';
+import ts from 'typescript';
+import type { FieldKind } from 'typespun/generated';
+import { validateTypedValue } from 'typespun/generated';
+import type { AnalyzeResult, Diagnostic, FieldIR } from '../contracts.js';
+import { readAnnotations, typespunSymbols } from './annotations.js';
+import { locationOf, sortDiagnostics } from './diagnostic.js';
+import { evaluateDefault } from './default-expression.js';
+
+export function analyzeProgram(
+  program: ts.Program,
+  inputPath: string,
+  envPrefix = '',
+): AnalyzeResult {
+  const checker = program.getTypeChecker();
+  const diagnostics: Diagnostic[] = [];
+  const fields: FieldIR[] = [];
+  const report = (code: string, message: string, node: ts.Node) =>
+    diagnostics.push({ code, message, location: locationOf(node) });
+  const symbols = typespunSymbols(program);
+  const annotationsFor = (node: ts.Node) =>
+    readAnnotations(node, report, checker, symbols);
+  const source = program.getSourceFile(path.resolve(inputPath));
+  if (!source)
+    return {
+      inputPath,
+      fields,
+      diagnostics: [
+        {
+          code: 'input_not_found',
+          message: 'Schema input is not in the TypeScript program.',
+          location: { file: inputPath, line: 1, column: 1 },
+        },
+      ],
+    };
+  const moduleSymbol = checker.getSymbolAtLocation(source);
+  const exportedSymbols = new Set(
+    (moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []).map(
+      (symbol) =>
+        symbol.flags & ts.SymbolFlags.Alias
+          ? checker.getAliasedSymbol(symbol)
+          : symbol,
+    ),
+  );
+  const roots = source.statements.filter(
+    (node): node is ts.InterfaceDeclaration | ts.ClassDeclaration =>
+      (ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)) &&
+      !!node.name &&
+      exportedSymbols.has(checker.getSymbolAtLocation(node.name)!) &&
+      annotationsFor(node).root,
+  );
+  if (roots.length !== 1) {
+    report(
+      'root_count',
+      'The input must export exactly one marked configuration root.',
+      source,
+    );
+    return { inputPath, fields, diagnostics };
+  }
+  const root = roots[0]!;
+  if (root.typeParameters?.length) {
+    report(
+      'generic_schema',
+      'Configuration roots cannot have type parameters.',
+      root.name ?? root,
+    );
+    return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
+  }
+  const rootType = checker.getTypeAtLocation(root);
+  if ((rootType.symbol?.declarations?.length ?? 0) > 1) {
+    report(
+      'declaration_merging',
+      'Configuration roots cannot use declaration merging.',
+      root.name ?? root,
+    );
+    return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
+  }
+  for (const index of checker.getIndexInfosOfType(rootType)) {
+    report(
+      'unsupported_type',
+      'Index signatures are not supported.',
+      index.declaration ?? root,
+    );
+  }
+  for (const member of root.members) {
+    if (
+      ts.isCallSignatureDeclaration(member) ||
+      ts.isConstructSignatureDeclaration(member)
+    ) {
+      report(
+        'unsupported_type',
+        'Index and call signatures are not supported.',
+        member,
+      );
+    }
+  }
+  const invalidMembers = new Set<ts.Node>();
+  if (ts.isClassDeclaration(root)) {
+    for (const heritage of root.heritageClauses ?? [])
+      report(
+        'class_inheritance',
+        'Configuration classes cannot inherit other classes.',
+        heritage,
+      );
+    for (const member of root.members) {
+      if (
+        !ts.isPropertyDeclaration(member) ||
+        ts.isPrivateIdentifier(member.name) ||
+        member.modifiers?.some((modifier) =>
+          [
+            ts.SyntaxKind.StaticKeyword,
+            ts.SyntaxKind.PrivateKeyword,
+            ts.SyntaxKind.ProtectedKeyword,
+          ].includes(modifier.kind),
+        )
+      ) {
+        report(
+          'invalid_class_member',
+          'Configuration classes allow only public instance data properties.',
+          member,
+        );
+        invalidMembers.add(member);
+      }
+    }
+  }
+  function containsIntersection(
+    node: ts.TypeNode | undefined,
+    seen = new Set<ts.Symbol>(),
+  ): boolean {
+    if (!node) return false;
+    if (ts.isIntersectionTypeNode(node)) return true;
+    if (ts.isParenthesizedTypeNode(node))
+      return containsIntersection(node.type, seen);
+    if (ts.isTypeReferenceNode(node)) {
+      let symbol = checker.getSymbolAtLocation(node.typeName);
+      if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
+        symbol = checker.getAliasedSymbol(symbol);
+      if (!symbol || seen.has(symbol)) return false;
+      seen.add(symbol);
+      return (
+        symbol.declarations?.some(
+          (declaration) =>
+            ts.isTypeAliasDeclaration(declaration) &&
+            containsIntersection(declaration.type, seen),
+        ) ?? false
+      );
+    }
+    return false;
+  }
+  function kindOf(type: ts.Type): FieldKind | undefined {
+    if (type.flags & ts.TypeFlags.String) return { type: 'string' };
+    if (type.flags & ts.TypeFlags.Number) return { type: 'number' };
+    if (
+      type.flags & ts.TypeFlags.NumberLiteral &&
+      !(type.flags & ts.TypeFlags.EnumLiteral)
+    )
+      return { type: 'number' };
+    if (type.flags & (ts.TypeFlags.Boolean | ts.TypeFlags.BooleanLiteral))
+      return { type: 'boolean' };
+    if (type.flags & ts.TypeFlags.StringLiteral)
+      return { type: 'enum', values: [(type as ts.StringLiteralType).value] };
+    if (
+      type.isUnion() &&
+      type.types.every((item) => item.flags & ts.TypeFlags.StringLiteral)
+    ) {
+      return {
+        type: 'enum',
+        values: type.types.map((item) => (item as ts.StringLiteralType).value),
+      };
+    }
+    if (checker.isArrayType(type)) {
+      const element = checker.getTypeArguments(type as ts.TypeReference)[0];
+      const kind = element && kindOf(element);
+      if (kind && ['string', 'number', 'boolean'].includes(kind.type))
+        return {
+          type: 'array',
+          element: kind.type as 'string' | 'number' | 'boolean',
+        };
+    }
+    return undefined;
+  }
+  const activeTypes = new Set<ts.Type>();
+  const activeProperties = new Set<ts.Node>();
+  const envNames = new Set<string>();
+  const defaultsPaths: string[][] = [];
+  function isObjectShape(type: ts.Type): boolean {
+    return (
+      !!(type.flags & ts.TypeFlags.Object) &&
+      !checker.isArrayType(type) &&
+      !checker.isTupleType(type) &&
+      checker.getIndexInfosOfType(type).length === 0 &&
+      type.getCallSignatures().length === 0 &&
+      type.getConstructSignatures().length === 0 &&
+      !(
+        type.symbol?.declarations?.some((declaration) =>
+          program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+        ) ?? false
+      )
+    );
+  }
+  function visit(
+    type: ts.Type,
+    propertyPath: string[],
+    defaultsPath: string[],
+    optionalParents: string[][],
+    secret: boolean,
+    parentDefault?: unknown,
+  ): void {
+    activeTypes.add(type);
+    for (const property of checker.getPropertiesOfType(type)) {
+      const node = property.valueDeclaration ?? property.declarations?.[0];
+      if (!node || invalidMembers.has(node)) continue;
+      const annotations = annotationsFor(node);
+      if (annotations.ignore) continue;
+      const name = property.getName();
+      if (!(ts.isPropertySignature(node) || ts.isPropertyDeclaration(node))) {
+        report('unsupported_type', 'Only data properties are supported.', node);
+        continue;
+      }
+      if (
+        !ts.isIdentifier(node.name) ||
+        ['__proto__', 'constructor', 'prototype'].includes(name)
+      ) {
+        report(
+          'invalid_property',
+          'Properties must use safe identifier names.',
+          node,
+        );
+        continue;
+      }
+      if (containsIntersection(node.type)) {
+        report('unsupported_type', 'Intersections are not supported.', node);
+        continue;
+      }
+      if (
+        annotations.key !== undefined &&
+        (!annotations.key ||
+          annotations.key.includes('.') ||
+          ['__proto__', 'constructor', 'prototype'].includes(annotations.key))
+      ) {
+        report(
+          'invalid_annotation',
+          'Key must be one nonempty, safe path segment.',
+          node,
+        );
+        continue;
+      }
+      if (
+        annotations.env !== undefined &&
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(annotations.env)
+      ) {
+        report(
+          'invalid_annotation',
+          'Env must be a valid complete environment name.',
+          node,
+        );
+        continue;
+      }
+      if (ts.isPropertyDeclaration(node) && node.initializer) {
+        const result = evaluateDefault(node.initializer, checker);
+        if (!result.ok) {
+          report(
+            'invalid_default',
+            'Initializers must be supported static values.',
+            node,
+          );
+          continue;
+        }
+        if (!annotations.hasDefault) {
+          annotations.hasDefault = true;
+          annotations.defaultValue = result.value;
+        }
+      }
+      if (
+        parentDefault &&
+        typeof parentDefault === 'object' &&
+        Object.hasOwn(parentDefault, name)
+      ) {
+        annotations.hasDefault = true;
+        annotations.defaultValue = (parentDefault as Record<string, unknown>)[
+          name
+        ];
+      }
+      const currentPath = [...propertyPath, name];
+      const currentDefaultsPath = [...defaultsPath, annotations.key ?? name];
+      const optional = !!(property.flags & ts.SymbolFlags.Optional);
+      let propertyType = checker.getTypeOfSymbolAtLocation(property, node);
+      if (
+        propertyType.isUnion() &&
+        propertyType.types.some((item) => item.flags & ts.TypeFlags.Null)
+      ) {
+        report('unsupported_type', 'Nullable unions are not supported.', node);
+        continue;
+      }
+      if (optional) propertyType = checker.getNonNullableType(propertyType);
+      const kind = kindOf(propertyType);
+      if (!kind && isObjectShape(propertyType)) {
+        if (annotations.env !== undefined)
+          report('object_env', 'Env annotations apply only to leaves.', node);
+        const resolvesTypeParameter =
+          node.type &&
+          !!(
+            checker.getTypeFromTypeNode(node.type).flags &
+            ts.TypeFlags.TypeParameter
+          );
+        if (
+          activeTypes.has(propertyType) ||
+          (activeProperties.has(node) && !resolvesTypeParameter)
+        ) {
+          report(
+            'recursive_type',
+            'Circular configuration shapes are not supported.',
+            node,
+          );
+          continue;
+        }
+        if (
+          annotations.hasDefault &&
+          (!annotations.defaultValue ||
+            typeof annotations.defaultValue !== 'object' ||
+            Array.isArray(annotations.defaultValue))
+        ) {
+          report(
+            'invalid_default',
+            'Object fields require object defaults.',
+            node,
+          );
+          continue;
+        }
+        if (
+          annotations.hasDefault &&
+          Object.keys(annotations.defaultValue as object).some(
+            (key) =>
+              ['__proto__', 'constructor', 'prototype'].includes(key) ||
+              !checker.getPropertyOfType(propertyType, key),
+          )
+        ) {
+          report(
+            'invalid_default',
+            'Object defaults contain unknown or unsafe properties.',
+            node,
+          );
+          continue;
+        }
+        const alreadyActive = activeProperties.has(node);
+        activeProperties.add(node);
+        visit(
+          propertyType,
+          currentPath,
+          currentDefaultsPath,
+          optional ? [...optionalParents, currentPath] : optionalParents,
+          secret || annotations.secret,
+          annotations.defaultValue,
+        );
+        if (!alreadyActive) activeProperties.delete(node);
+        continue;
+      }
+      if (!kind) {
+        report('unsupported_type', 'This field type is not supported.', node);
+        continue;
+      }
+      if (
+        annotations.hasDefault &&
+        validateTypedValue(kind, annotations.defaultValue) !== undefined
+      ) {
+        report(
+          'invalid_default',
+          'The inline default does not match its field type.',
+          node,
+        );
+        continue;
+      }
+      const snake = currentPath
+        .map((part) =>
+          part
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+            .toUpperCase(),
+        )
+        .join('_');
+      const prefix = envPrefix.replace(/_+$/, '');
+      const envName =
+        annotations.env ?? (prefix ? `${prefix}_${snake}` : snake);
+      if (envNames.has(envName))
+        report(
+          'duplicate_env',
+          'Multiple fields resolve to the same environment name.',
+          node,
+        );
+      if (
+        defaultsPaths.some((previous) =>
+          previous
+            .slice(0, Math.min(previous.length, currentDefaultsPath.length))
+            .every((part, index) => part === currentDefaultsPath[index]),
+        )
+      ) {
+        report(
+          'duplicate_defaults_path',
+          'Multiple fields resolve to conflicting defaults paths.',
+          node,
+        );
+      }
+      envNames.add(envName);
+      defaultsPaths.push(currentDefaultsPath);
+      fields.push({
+        propertyPath: currentPath,
+        defaultsPath: currentDefaultsPath,
+        envName,
+        kind,
+        required: !optional,
+        secret: secret || annotations.secret,
+        hasDefault: annotations.hasDefault,
+        ...(annotations.hasDefault
+          ? { defaultValue: annotations.defaultValue }
+          : {}),
+        optionalParents,
+        location: locationOf(node),
+      });
+    }
+    activeTypes.delete(type);
+  }
+  visit(rootType, [], [], [], false);
+  return {
+    ...(diagnostics.length === 0 && root.name
+      ? { rootName: root.name.text }
+      : {}),
+    inputPath,
+    fields,
+    diagnostics: sortDiagnostics(diagnostics),
+  };
+}
