@@ -76,12 +76,26 @@ export async function initializeProject(
   validateExistingSchemaStyle(projectDirectory, input, options.style);
   const inputPath = resolve(projectDirectory, input);
   const outputPath = resolve(projectDirectory, output);
+  const inputNeedsCreation = !existsSync(inputPath);
   if (pathsReferToSameFile(inputPath, outputPath)) {
     throw new InitProjectError('Schema input and generated output must differ');
   }
   if (pathEntryExists(outputPath) && !isTypespunGeneratedOutput(outputPath)) {
     throw new InitProjectError(
       `Initialization refuses to overwrite the existing output at ${output}`,
+    );
+  }
+
+  const discoveredDefaults =
+    existingConfig?.defaults === undefined
+      ? discoverDefaultsPath(projectDirectory)
+      : undefined;
+  const createDefaults =
+    existingConfig?.defaults === undefined && discoveredDefaults === undefined;
+  const defaultDefaultsPath = join(projectDirectory, 'config.yaml');
+  if (createDefaults && pathEntryExists(defaultDefaultsPath)) {
+    throw new InitProjectError(
+      'Initialization refuses to overwrite the existing entry at config.yaml',
     );
   }
 
@@ -104,11 +118,21 @@ export async function initializeProject(
         existingConfig.envPrefix === undefined));
   const messages: string[] = [];
 
-  if (!existsSync(inputPath)) {
+  if (inputNeedsCreation) {
     await writeNewFile(inputPath, schemaTemplate(options.style ?? 'interface'));
     messages.push(`Created ${input}.`);
   }
-  const serializedConfig = `${JSON.stringify(config, null, 2)}\n`;
+  if (createDefaults) {
+    await writeNewFile(
+      defaultDefaultsPath,
+      inputNeedsCreation ? 'port: 3000\n' : '{}\n',
+    );
+    messages.push('Created config.yaml.');
+  }
+  const serializedConfig =
+    existingConfig === undefined
+      ? serializeNewConfig(config)
+      : `${JSON.stringify(config, null, 2)}\n`;
   if (existingConfig === undefined) {
     await writeNewFile(configPath, serializedConfig);
     messages.push('Created typespun.json.');
@@ -242,9 +266,13 @@ function preflightResolvedConfig(
 function readInitConfig(path: string): InitConfig {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, 'utf8'));
+    const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'));
+    if (parsed.error !== undefined) throw new Error('invalid JSON');
+    value = parsed.config;
   } catch {
-    throw new InitProjectError('typespun.json must contain valid JSON');
+    throw new InitProjectError(
+      'typespun.json must contain valid JSON with comments',
+    );
   }
   if (!isRecord(value)) {
     throw new InitProjectError('typespun.json must contain an object');
@@ -279,6 +307,42 @@ function readInitConfig(path: string): InitConfig {
     );
   }
   return value as InitConfig;
+}
+
+function serializeNewConfig(config: InitConfig): string {
+  const outputHasComma = config.envPrefix !== undefined;
+  const prefixLines =
+    config.envPrefix === undefined
+      ? [
+          '',
+          '  // Optional environment prefix. APP produces keys such as APP_PORT.',
+          '  // "envPrefix": "APP",',
+        ]
+      : [
+          `  "envPrefix": ${JSON.stringify(config.envPrefix)}`,
+          '',
+          '  // Environment keys use the configured prefix, such as APP_PORT.',
+        ];
+
+  return `${[
+    '{',
+    `  "input": ${JSON.stringify(config.input)},`,
+    `  "output": ${JSON.stringify(config.output)}${outputHasComma ? ',' : ''}`,
+    ...prefixLines,
+    '',
+    '  // Optional tsconfig override. Default: nearest tsconfig.json to the input.',
+    '  // "tsconfig": "tsconfig.json",',
+    '',
+    '  // Optional defaults override. config.yaml is discovered automatically.',
+    '  // "defaults": {',
+    '  //   "path": "config.yaml",',
+    '  //   "unknownKeys": "error" // Allowed: "error", "warn", or "ignore".',
+    '  // },',
+    '',
+    '  // Policy for defaults on secret fields. Allowed: "warn", "allow", or "error".',
+    '  // "secretDefaults": "warn"',
+    '}',
+  ].join('\n')}\n`;
 }
 
 function validateDefaultsConfig(value: unknown): void {

@@ -13,59 +13,82 @@ Typespun turns one TypeScript interface or schema-only class into deterministic,
 committable TypeScript that resolves and validates application configuration at
 startup.
 
-## The 30-second path
+## The first runnable path
 
 ![TypeScript declarations and configuration sources converging into a validated typed object](docs/assets/typespun-hero.png)
 
-Declare a configuration root:
+Start in an ESM TypeScript project with Bun 1.4.1 or newer, a `package.json`,
+and a usable `tsconfig.json`. Install both packages, then initialize:
+
+```sh
+bun add typespun
+bun add --dev typespun-codegen
+bun typespun init --env-prefix APP
+```
+
+Using npm:
+
+```sh
+npm install typespun
+npm install --save-dev typespun-codegen
+npx typespun init --env-prefix APP
+```
+
+On a fresh project, `init` creates this declaration:
 
 ```ts
 /** @typespun */
 export interface AppConfig {
-  server: { host: string; port: number };
-  /** @secret */
-  databaseUrl: string;
+  port: number;
 }
 ```
 
-Configure and generate it:
+It also creates `typespun.json`:
 
 ```json
 {
   "input": "src/config.ts",
   "output": "src/generated/typespun.ts",
-  "envPrefix": "APP"
+  "envPrefix": "APP",
+  "defaults": "config.yaml"
 }
 ```
 
-```json
-{
-  "scripts": {
-    "config:generate": "typespun generate",
-    "config:check": "typespun check"
-  }
-}
+It creates `config.yaml` with a working default:
+
+```yaml
+port: 3000
 ```
 
-```sh
-bun run config:generate
+It also adds `config:generate` and `config:check` scripts to `package.json`.
+Because both packages are installed, it generates the loader immediately:
+
+```console
+Created src/config.ts.
+Created config.yaml.
+Created typespun.json.
+Added config:generate and config:check scripts.
+Generated src/generated/typespun.ts.
 ```
 
-Load the generated, typed configuration:
+Create `src/index.ts` and load the generated, typed configuration:
 
 ```ts
 import { loadConfig } from './generated/typespun.js';
 
-const config = loadConfig({
-  source: {
-    APP_SERVER_HOST: '127.0.0.1',
-    APP_SERVER_PORT: '3000',
-    APP_DATABASE_URL: 'postgres://localhost/example',
-  },
-});
-
-console.log(config.server.port); // 3000, typed as number
+const config = loadConfig();
+console.log(config.port);
 ```
+
+```console
+$ bun src/index.ts
+3000
+```
+
+After changing the declaration or Typespun settings, rerun
+`bun run config:generate`. See the
+[copy-pasteable tutorial](docs/getting-started.md) for exact scaffold output,
+project requirements, flags, and validation behavior.
 
 ## Install
 

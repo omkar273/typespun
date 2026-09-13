@@ -22,11 +22,13 @@ Defaults are interface style, `src/config.ts`, matching
 `.cts`.
 
 The command requires a valid `package.json` and usable `tsconfig.json`. It
-creates a declaration and `typespun.json` when missing, adds missing
-`config:generate`/`config:check` scripts without replacing existing scripts,
-and performs first generation when dependencies are installed. It never runs a
-package installer; if dependencies are absent it prints manager-specific
-commands.
+creates a declaration, `config.yaml`, and `typespun.json` when no corresponding
+files exist, adds missing `config:generate`/`config:check` scripts without
+replacing existing scripts, and performs first generation when dependencies are
+installed. A new default schema gets `port: 3000`; an existing schema gets an
+empty defaults object. An existing conventional JSON/YAML defaults file is
+preserved and discovered instead. `init` never runs a package installer; if
+dependencies are absent it prints manager-specific commands.
 
 `init` is idempotent for an initialized project. It refuses conflicting flags,
 input/output aliases, symlinks that alias them, and any output not recognizable
@@ -40,6 +42,7 @@ Typical output:
 
 ```text
 Created src/config.ts.
+Created config.yaml.
 Created typespun.json.
 Added config:generate and config:check scripts.
 Generated src/generated/typespun.ts.

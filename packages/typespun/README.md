@@ -4,30 +4,58 @@
 
 # typespun
 
-The runtime package for Typespun: generated, validated configuration for
-TypeScript applications.
+The small runtime behind Typespun's generated, validated configuration loaders
+for TypeScript. Schema analysis and the CLI are shipped separately in
+[`typespun-codegen`](https://www.npmjs.com/package/typespun-codegen).
 
 [![npm](https://img.shields.io/npm/v/typespun.svg)](https://www.npmjs.com/package/typespun)
 [![license](https://img.shields.io/npm/l/typespun.svg)](LICENSE)
 
-`typespun` provides class decorators, `ConfigError`, runtime types, and the
-versioned ABI used by generated loaders. Schema analysis and the CLI live in the
-separate [`typespun-codegen`](https://www.npmjs.com/package/typespun-codegen)
-development package.
+## Get started
 
-## Install
+Install the runtime and the development-only generator:
 
 ```sh
 bun add typespun
 bun add --dev typespun-codegen
 ```
 
-Both packages are required while developing. Only `typespun` is needed by the
-generated loader at runtime.
+Initialize a TypeScript project that already has `package.json` and
+`tsconfig.json`:
 
-## Use the generated loader
+```sh
+bun typespun init --env-prefix APP
+```
 
-Application code normally imports from its generated module:
+The package name is `typespun-codegen`; the executable it installs is
+`typespun`. `init` creates `src/config.ts`, a `config.yaml` starter default,
+`typespun.json`, the generated loader, and `config:generate` / `config:check`
+package scripts without overwriting existing project files.
+
+The npm equivalent is fully local after the two install commands:
+
+```sh
+npx typespun init --env-prefix APP
+```
+
+Declare the configuration once in `src/config.ts`:
+
+```ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  /** @secret */
+  apiToken: string;
+}
+```
+
+Regenerate and commit the loader:
+
+```sh
+bun run config:generate
+```
+
+Application code imports the generated `Config` type and `loadConfig()`:
 
 ```ts
 import { ConfigError } from 'typespun';
@@ -36,49 +64,65 @@ import { loadConfig, type Config } from './generated/typespun.js';
 try {
   const config: Config = loadConfig({
     envFiles: [{ path: '.env', optional: true }],
+    source: {
+      APP_SERVER_HOST: '127.0.0.1',
+      APP_SERVER_PORT: '3000',
+      APP_API_TOKEN: 'development-token',
+    },
+    overrides: { server: { port: 4000 } },
   });
-  console.log(config.server.port);
+
+  console.log(config.server.port); // 4000, typed as number
 } catch (error) {
   if (error instanceof ConfigError) console.error(error.issues);
+  else throw error;
 }
 ```
 
-The loader resolves each leaf from highest to lowest precedence:
+Run `bun run config:check` in CI. It does not write files and exits nonzero when
+the committed loader is missing or stale.
 
-1. typed overrides
-2. an explicit environment-shaped `source`, or `process.env` when omitted
+For npm, install with `npm install typespun` and `npm install --save-dev
+typespun-codegen`. The runtime supports Bun 1.4.1+ and Node.js 22 or 24.
+
+## Resolution and failures
+
+Each leaf uses the highest-precedence defined value:
+
+1. typed `overrides`
+2. explicit environment-shaped `source`, or `process.env` when omitted
 3. dotenv files, with later entries winning
 4. compiled JSON/YAML defaults
 5. inline declaration defaults
 
-Loading is synchronous. Missing and invalid values are aggregated into one
-`ConfigError`. A field marked secret omits its received value and type-specific
-details from Typespun-generated diagnostics.
+`source: {}` disables the ambient `process.env` fallback. Dotenv files are read
+synchronously without mutating `process.env`; typed overrides are validated but
+not string-coerced.
+
+Missing, invalid, unknown-override, source-read, and generated-schema problems
+are aggregated in one `ConfigError.issues` array. For a field marked `@secret`
+or `@Secret()`, Typespun omits the received value and type-specific details from
+its own invalid-value diagnostic. This is diagnostic redaction, not encryption,
+a secret store, or protection from application logs. Generated defaults are
+committed, so do not put secrets in them.
 
 ## Public imports
 
-From `typespun`:
+- `typespun` exports `Config`, `Default`, `Env`, `Ignore`, `Key`, and `Secret`
+  decorators plus `ConfigError` and `ConfigIssue`.
+- `typespun/generated` exports the versioned runtime ABI used by generated
+  files: `createLoader`, `resolveConfig`, `validateTypedValue`, and its schema
+  and loader option types. Application code should normally import the
+  generated module instead of using this entry point directly.
 
-- `Config`, `Default`, `Env`, `Ignore`, `Key`, and `Secret`: inert decorators
-  read statically by the generator
-- `ConfigError` and the `ConfigIssue` type: runtime failure handling
+## Documentation
 
-From `typespun/generated`:
-
-- `createLoader`, `resolveConfig`, and `validateTypedValue`
-- generated-schema and loader option types
-
-The second entry point is primarily an ABI for generated files. Most application
-code should use the generated `Config` and `loadConfig` exports.
-
-## Compatibility and boundaries
-
-The package provides ESM and CommonJS entry points for Node.js 22 and 24 and Bun
-1.4.1 or newer. Secret marking redacts Typespun diagnostics; it is not
-encryption, a secret store, or a scrubber for application logs.
-
-Read the [project documentation](https://github.com/omkar273/typespun#readme),
-[runtime API](https://github.com/omkar273/typespun/blob/main/docs/api/runtime.md),
-and [security policy](https://github.com/omkar273/typespun/blob/main/SECURITY.md).
+- [Getting started](https://github.com/omkar273/typespun/blob/main/docs/getting-started.md)
+- [Generated loader API](https://github.com/omkar273/typespun/blob/main/docs/api/generated-loader.md)
+- [Runtime API](https://github.com/omkar273/typespun/blob/main/docs/api/runtime.md)
+- [Source precedence](https://github.com/omkar273/typespun/blob/main/docs/concepts/source-precedence.md)
+- [Validation and redaction](https://github.com/omkar273/typespun/blob/main/docs/concepts/validation-and-redaction.md)
+- [CLI reference](https://github.com/omkar273/typespun/blob/main/docs/api/cli.md)
+- [Security policy](https://github.com/omkar273/typespun/blob/main/SECURITY.md)
 
 MIT © Typespun contributors

@@ -198,6 +198,31 @@ describe('project configuration', () => {
     expect(result.secretDefaults).toBe('allow');
   });
 
+  test('accepts comments in typespun.json', () => {
+    const projectDirectory = createProject();
+    writeProjectFile(
+      projectDirectory,
+      'src/config.ts',
+      'export interface Config {}',
+    );
+    writeProjectFile(projectDirectory, 'tsconfig.json', '{}');
+    writeProjectFile(
+      projectDirectory,
+      'typespun.json',
+      `{
+  "input": "src/config.ts",
+  "output": "src/generated/typespun.ts",
+  // Allowed: "warn", "allow", or "error".
+  "secretDefaults": "allow"
+}
+`,
+    );
+
+    const result = loadProjectConfig({ projectDirectory });
+
+    expect(result.secretDefaults).toBe('allow');
+  });
+
   test('discovers defaults and the nearest tsconfig when config options omit paths', () => {
     const projectDirectory = createProject();
     writeProjectFile(

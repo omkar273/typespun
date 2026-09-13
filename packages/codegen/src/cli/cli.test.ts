@@ -115,7 +115,11 @@ describe('init', () => {
     ).toEqual({
       input: 'src/config.ts',
       output: 'src/generated/typespun.ts',
+      defaults: 'config.yaml',
     });
+    expect(await readFile(join(project, 'config.yaml'), 'utf8')).toBe(
+      'port: 3000\n',
+    );
     expect(
       JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).scripts,
     ).toEqual({
@@ -134,6 +138,20 @@ describe('init', () => {
     expect(
       await readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
     ).toBe(generatedBefore);
+  });
+
+  test('preserves an existing conventional defaults file instead of creating config.yaml', async () => {
+    const project = await createBareProject();
+    await writeFile(join(project, 'config.yml'), 'port: 4000\n');
+    await linkWorkspaceDependencies(project);
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(0);
+    expect(await Bun.file(join(project, 'config.yaml')).exists()).toBe(false);
+    expect(await readFile(join(project, 'config.yml'), 'utf8')).toBe(
+      'port: 4000\n',
+    );
   });
 
   test('supports class style and explicit paths without normalizing the requested prefix', async () => {
@@ -162,6 +180,7 @@ describe('init', () => {
       input: 'config/app.mts',
       output: 'config/generated.mts',
       envPrefix: 'APP_',
+      defaults: 'config.yaml',
     });
   });
 
@@ -329,6 +348,7 @@ describe('init', () => {
       input: 'settings/app.ts',
       output: 'settings/generated.ts',
       envPrefix: 'APP',
+      defaults: 'config.yaml',
     });
     expect(await Bun.file(join(project, 'settings/app.ts')).exists()).toBe(
       true,

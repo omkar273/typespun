@@ -1,25 +1,122 @@
 # Getting started
 
-This tutorial builds a small Bun application, but the generated loader also
-runs on the supported Node.js versions.
+This tutorial starts with `typespun init`, builds a small Bun application, and
+shows the entire first run. The generated loader also runs on Node.js 22 and 24.
 
 ## Prerequisites
 
 - Bun 1.4.1 or newer
-- TypeScript 6
-- An ESM TypeScript project with `package.json` and `tsconfig.json`
+- An ESM TypeScript project with a `package.json`
+- A usable `tsconfig.json` that includes the schema and generated module
 
 Typespun remains pre-release software. Pin the package versions if you need
 reproducible early adoption.
 
-## 1. Install both packages
+For a minimal project, start with these files:
+
+`package.json`:
+
+```json
+{
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.1"
+}
+```
+
+`tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "target": "ES2022"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+Run the remaining commands from the directory containing those files.
+
+## 1. Install and initialize
+
+Install `typespun` as an application dependency and `typespun-codegen` as a
+development dependency. The generator package installs an executable named
+`typespun`:
 
 ```sh
 bun add typespun
 bun add --dev typespun-codegen
+bun typespun init --env-prefix APP
 ```
 
-Add local CLI scripts to `package.json`:
+Using npm, the equivalent flow is:
+
+```sh
+npm install typespun
+npm install --save-dev typespun-codegen
+npx typespun init --env-prefix APP
+```
+
+The command scaffolds the project and performs the first generation:
+
+```text
+Created src/config.ts.
+Created config.yaml.
+Created typespun.json.
+Added config:generate and config:check scripts.
+Generated src/generated/typespun.ts.
+```
+
+`init` creates directories as needed and adds only missing scripts. It does not
+run a package installer, create `.env`, create an application entry point, or
+overwrite an existing defaults file or app-owned output file. Both dependencies
+are now locally resolvable, so the generated loader is part of this first run.
+
+The initializer accepts:
+
+```text
+--style interface|class
+--input <path>
+--output <path>
+--env-prefix <prefix>
+```
+
+The defaults are interface style, `src/config.ts`, and
+`src/generated/typespun.ts`. Here, `--env-prefix APP` makes the generated
+environment key for `port` equal to `APP_PORT`.
+
+## 2. Inspect the scaffold
+
+`src/config.ts` is a runnable declaration:
+
+```ts
+/** @typespun */
+export interface AppConfig {
+  port: number;
+}
+```
+
+`typespun.json` records the selected paths and prefix:
+
+```json
+{
+  "input": "src/config.ts",
+  "output": "src/generated/typespun.ts",
+  "envPrefix": "APP",
+  "defaults": "config.yaml"
+}
+```
+
+The new `config.yaml` makes the starter runnable without environment setup:
+
+```yaml
+port: 3000
+```
+
+The command also adds these entries without replacing existing scripts:
 
 ```json
 {
@@ -30,57 +127,10 @@ Add local CLI scripts to `package.json`:
 }
 ```
 
-The package is named `typespun-codegen`; its executable is named `typespun`.
+Running `init` again is safe and leaves an initialized project unchanged.
+Flags that conflict with its existing `typespun.json` are rejected.
 
-## 2. Declare configuration
-
-Create `src/config.ts`:
-
-```ts
-export enum Stage {
-  Development = 'development',
-  Production = 'production',
-}
-
-/** @typespun */
-export interface AppConfig {
-  server: { host: string; port: number };
-  stage: Stage;
-  origins: string[];
-  /**
-   * @env DATABASE_URL
-   * @secret
-   */
-  databaseUrl: string;
-}
-```
-
-Create `typespun.json`:
-
-```json
-{
-  "input": "src/config.ts",
-  "output": "src/generated/typespun.ts",
-  "envPrefix": "APP",
-  "defaults": {
-    "path": "config/config.yaml",
-    "unknownKeys": "error"
-  }
-}
-```
-
-Create `config/config.yaml`:
-
-```yaml
-server:
-  host: 127.0.0.1
-  port: 3000
-stage: development
-origins:
-  - https://example.com
-```
-
-## 3. Generate the loader
+## 3. Regenerate after declaration changes
 
 ```sh
 bun run config:generate
@@ -92,7 +142,9 @@ Expected output:
 Generated src/generated/typespun.ts.
 ```
 
-The generated module exports `Config` and `loadConfig`. Commit this file.
+The generated module exports `Config` and `loadConfig`. Commit this file. Since
+`init` already generated it, running this command before making changes prints
+`Unchanged src/generated/typespun.ts.` instead.
 
 ## 4. Load configuration
 
@@ -101,20 +153,8 @@ Create `src/index.ts`:
 ```ts
 import { loadConfig } from './generated/typespun.js';
 
-const config = loadConfig({
-  envFiles: [{ path: '.env', optional: true }],
-});
-
-console.log(
-  `Listening on ${config.server.host}:${config.server.port} (${config.stage})`,
-);
-```
-
-Create a local, ignored `.env`:
-
-```dotenv
-APP_SERVER_PORT=4000
-DATABASE_URL=postgres://localhost/example
+const config = loadConfig();
+console.log(`Listening on port ${config.port}`);
 ```
 
 Run the application:
@@ -126,20 +166,18 @@ bun src/index.ts
 Expected output:
 
 ```text
-Listening on 127.0.0.1:4000 (development)
+Listening on port 3000
 ```
 
-Typespun parses dotenv files in the order passed; later files win. An explicit
-`source` wins over dotenv, while omitting `source` reads `process.env`. Arrays in
-environment sources use JSON, for example `APP_ORIGINS='["https://a.test"]'`.
+The first value comes from `config.yaml`. Environment values such as
+`APP_PORT=4000` take precedence over that compiled default. Pass `envFiles` to
+load dotenv files; an explicit `source` wins over dotenv. Arrays in environment
+sources use JSON, for example `APP_ORIGINS='["https://a.test"]'`.
+
+After changing `src/config.ts`, `typespun.json`, or a configured defaults file,
+rerun `bun run config:generate` and commit the changed generated module.
 
 ## 5. See a validation failure
-
-Change `.env` to:
-
-```dotenv
-APP_SERVER_PORT=not-a-number
-```
 
 `loadConfig()` throws `ConfigError`. Handle it at the application boundary:
 
@@ -148,7 +186,7 @@ import { ConfigError } from 'typespun';
 import { loadConfig } from './generated/typespun.js';
 
 try {
-  loadConfig({ envFiles: ['.env'], source: {} });
+  loadConfig({ source: { APP_PORT: 'not-a-number' } });
 } catch (error) {
   if (error instanceof ConfigError) {
     console.error(error.message);
@@ -165,13 +203,12 @@ Expected issue summary:
 
 ```text
 Configuration validation failed
-invalid_value server.port (APP_SERVER_PORT): Expected a finite number
-missing_value databaseUrl (DATABASE_URL): Missing required value for databaseUrl
+invalid_value port (APP_PORT): Expected a finite number
 ```
 
-The error aggregates both fields. If a secret candidate is invalid, its issue
-never includes the candidate as `received` or type details that could reveal an
-allowed secret.
+When multiple fields fail, the error aggregates their issues. If a secret
+candidate is invalid, its issue never includes the candidate as `received` or
+type details that could reveal an allowed secret.
 
 ## 6. Keep generation current in CI
 

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
+import ts from 'typescript';
 import type { SecretDefaultsPolicy, UnknownKeysPolicy } from '../contracts.js';
 import {
   discoverDefaultsPath,
@@ -102,9 +103,13 @@ export function loadProjectConfig(
 function readProjectConfig(path: string): RawProjectConfig {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, 'utf8'));
+    const parsed = ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8'));
+    if (parsed.error !== undefined) throw new Error('invalid JSON');
+    value = parsed.config;
   } catch {
-    throw new ProjectConfigError('Could not parse typespun.json as JSON');
+    throw new ProjectConfigError(
+      'Could not parse typespun.json as JSON with comments',
+    );
   }
 
   if (!isRecord(value)) {
