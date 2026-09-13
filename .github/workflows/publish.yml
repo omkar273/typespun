@@ -1,0 +1,59 @@
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm-tag:
+        description: 'npm dist-tag to use'
+        required: false
+        default: latest
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Set npm tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.npm-tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build packages
+        run: bun run build
+
+      - name: Publish typespun
+        run: |
+          cd packages/typespun
+          npm whoami
+          npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+
+      - name: Publish typespun-codegen
+        run: |
+          cd packages/codegen
+          npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
