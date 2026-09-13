@@ -131,8 +131,7 @@ export type DeepPartial<T> = T extends readonly unknown[]
 
 export interface LoadConfigOptions<T> {
   readonly envFiles?: readonly (
-    | string
-    | { readonly path: string; readonly optional?: boolean }
+    string | { readonly path: string; readonly optional?: boolean }
   )[];
   readonly source?: Readonly<Record<string, string | undefined>>;
   readonly overrides?: DeepPartial<T>;
