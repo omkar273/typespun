@@ -80,7 +80,7 @@ describe('createLoader', () => {
     const secondPath = join(temp.path, 'second.env');
     await writeFile(
       firstPath,
-      'PORT=3000\nENABLED=true\nMODE=development\nORIGINS=["https://first.example.com"]\nTOKEN=first-token\n',
+      'PORT=not-a-number\nENABLED=true\nMODE=development\nORIGINS=["https://first.example.com"]\nTOKEN=first-token\n',
     );
     await writeFile(
       secondPath,
@@ -152,6 +152,30 @@ describe('createLoader', () => {
     ]);
   });
 
+  test('rejects empty enum values even when the generated enum includes an empty member', () => {
+    const emptyEnumSchema = {
+      protocolVersion: 1,
+      fields: [
+        {
+          propertyPath: ['mode'],
+          defaultsPath: ['mode'],
+          envName: 'MODE',
+          kind: { type: 'enum', values: ['', 'production'] },
+          required: true,
+          secret: false,
+          hasDefault: false,
+          optionalParents: [],
+        },
+      ],
+    } as const satisfies GeneratedSchema;
+    const loadEmptyEnum = createLoader<{ mode: string }>(emptyEnumSchema);
+    const error = getConfigError(() => loadEmptyEnum({ source: { MODE: '' } }));
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({ code: 'invalid_value', path: 'mode' }),
+    ]);
+  });
+
   test('lets the later dotenv file replace the earlier dotenv value', async () => {
     using temp = await makeTempDirectory();
     const firstPath = join(temp.path, 'first.env');
@@ -169,6 +193,25 @@ describe('createLoader', () => {
       origins: ['https://example.com'],
       token: 'runtime-token',
     });
+  });
+
+  test('treats ambient process.env as the default source above dotenv files', async () => {
+    using temp = await makeTempDirectory();
+    const dotenvPath = join(temp.path, 'runtime.env');
+    await writeFile(dotenvPath, validDotenv({ PORT: '3000' }));
+    const previous = process.env.TYPESPUN_AMBIENT_PORT;
+    process.env.TYPESPUN_AMBIENT_PORT = '4000';
+
+    try {
+      const onlyPort = createLoader<{ port: number }>(
+        singleFieldSchema('TYPESPUN_AMBIENT_PORT'),
+      );
+      await writeFile(dotenvPath, 'TYPESPUN_AMBIENT_PORT=3000\n');
+
+      expect(onlyPort({ envFiles: [dotenvPath] })).toEqual({ port: 4000 });
+    } finally {
+      restoreEnvironment('TYPESPUN_AMBIENT_PORT', previous);
+    }
   });
 
   test('does not fall back to process.env when an explicit empty source is supplied', () => {
@@ -283,6 +326,58 @@ describe('createLoader', () => {
     ]);
   });
 
+  test('requires optional descendants when a later field activates their parent', () => {
+    const loadDatabase = createLoader<{
+      database?: { host: string; port: number };
+    }>(reverseOptionalDatabaseSchema);
+    const error = getConfigError(() =>
+      loadDatabase({ source: { DATABASE_HOST: 'db.internal' } }),
+    );
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({ code: 'missing_value', path: 'database.port' }),
+    ]);
+  });
+
+  test('uses compiled defaults above inline defaults without mutating either array', () => {
+    const inlineOrigins = ['https://inline.example.com'];
+    const compiledOrigins = ['https://compiled.example.com'];
+    const loadDefaults = createLoader<{ origins: string[] }>(
+      defaultsSchema(inlineOrigins, compiledOrigins),
+    );
+
+    const first = loadDefaults({ source: {} });
+    const second = loadDefaults({ source: {} });
+
+    expect(first).toEqual({ origins: ['https://compiled.example.com'] });
+    expect(first.origins).not.toBe(compiledOrigins);
+    expect(second.origins).not.toBe(first.origins);
+    first.origins.push('mutated');
+    expect(second.origins).toEqual(['https://compiled.example.com']);
+    expect(inlineOrigins).toEqual(['https://inline.example.com']);
+    expect(compiledOrigins).toEqual(['https://compiled.example.com']);
+
+    const inlineOnly = createLoader<{ origins: string[] }>(
+      defaultsSchema(inlineOrigins),
+    );
+    const inlineResult = inlineOnly({ source: {} });
+    expect(inlineResult.origins).toEqual(['https://inline.example.com']);
+    expect(inlineResult.origins).not.toBe(inlineOrigins);
+  });
+
+  test('clones typed override arrays instead of returning the caller-owned array', () => {
+    const origins = ['https://override.example.com'];
+    const resolved = load({
+      source: validSource(),
+      overrides: { origins },
+    });
+
+    expect(resolved.origins).toEqual(['https://override.example.com']);
+    expect(resolved.origins).not.toBe(origins);
+    resolved.origins.push('mutated');
+    expect(origins).toEqual(['https://override.example.com']);
+  });
+
   test('rejects unsafe schema paths instead of assigning prototype properties', () => {
     const unsafeSchema = singleFieldSchema('PORT', ['__proto__']);
     const unsafeLoad = createLoader<{ port: number }>(unsafeSchema);
@@ -325,6 +420,57 @@ const optionalDatabaseSchema = {
     },
   ],
 } as const satisfies GeneratedSchema;
+
+const reverseOptionalDatabaseSchema = {
+  protocolVersion: 1,
+  fields: [
+    {
+      propertyPath: ['database', 'port'],
+      defaultsPath: ['database', 'port'],
+      envName: 'DATABASE_PORT',
+      kind: { type: 'number' },
+      required: true,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [['database']],
+    },
+    {
+      propertyPath: ['database', 'host'],
+      defaultsPath: ['database', 'host'],
+      envName: 'DATABASE_HOST',
+      kind: { type: 'string' },
+      required: true,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [['database']],
+    },
+  ],
+} as const satisfies GeneratedSchema;
+
+function defaultsSchema(
+  inlineOrigins: readonly string[],
+  compiledOrigins?: readonly string[],
+): GeneratedSchema {
+  return {
+    protocolVersion: 1,
+    fields: [
+      {
+        propertyPath: ['origins'],
+        defaultsPath: ['origins'],
+        envName: 'ORIGINS',
+        kind: { type: 'array', element: 'string' },
+        required: true,
+        secret: false,
+        hasDefault: true,
+        defaultValue: inlineOrigins,
+        optionalParents: [],
+      },
+    ],
+    ...(compiledOrigins === undefined
+      ? {}
+      : { compiledDefaults: { origins: compiledOrigins } }),
+  };
+}
 
 function validSource(
   overrides: Record<string, string> = {},

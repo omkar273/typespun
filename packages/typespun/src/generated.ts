@@ -29,7 +29,9 @@ export function validateTypedValue(
     case 'boolean':
       return typeof value === 'boolean' ? undefined : 'Expected a boolean';
     case 'enum':
-      return typeof value === 'string' && kind.values.includes(value)
+      return typeof value === 'string' &&
+        value !== '' &&
+        kind.values.includes(value)
         ? undefined
         : `Expected one of: ${kind.values.join(', ')}`;
     case 'array':

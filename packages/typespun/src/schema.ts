@@ -20,6 +20,7 @@ export interface FieldSchema {
 export interface GeneratedSchema {
   readonly protocolVersion: 1;
   readonly fields: readonly FieldSchema[];
+  readonly compiledDefaults?: Readonly<Record<string, unknown>>;
 }
 
 export type DeepPartial<T> = T extends readonly unknown[]

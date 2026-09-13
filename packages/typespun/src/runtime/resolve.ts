@@ -61,23 +61,29 @@ export function resolveConfig<T>(
     }
   }
 
+  const selections = fields.map((field) => ({
+    field,
+    candidate: findCandidate(field, schema, options, dotenv.sources, overrides),
+  }));
   const activeParents = new Set<string>();
-  const resolved: { field: FieldSchema; value: unknown }[] = [];
-
-  for (const field of fields) {
-    const candidate = findCandidate(field, options, dotenv.sources, overrides);
+  for (const { field, candidate } of selections) {
     if (candidate !== undefined) {
       for (const parent of field.optionalParents) {
         activeParents.add(formatPath(parent));
       }
+    }
+  }
 
+  const resolved: { field: FieldSchema; value: unknown }[] = [];
+  for (const { field, candidate } of selections) {
+    if (candidate !== undefined) {
       const result = candidate.environmentValue
         ? coerceEnvironmentValue(field.kind, candidate.value as string)
         : validateTypedCandidate(field.kind, candidate.value);
       if ('error' in result) {
         issues.push(invalidValueIssue(field, candidate, result.error));
       } else {
-        resolved.push({ field, value: result.value });
+        resolved.push({ field, value: cloneResolvedValue(result.value) });
       }
     } else if (field.required && isFieldActive(field, activeParents)) {
       issues.push({
@@ -160,6 +166,7 @@ function validateSchema(
 
 function findCandidate<T>(
   field: FieldSchema,
+  schema: GeneratedSchema,
   options: LoadConfigOptions<T>,
   dotenvSources: readonly {
     name: string;
@@ -183,6 +190,13 @@ function findCandidate<T>(
     }
   }
 
+  if (options.source === undefined) {
+    const value = process.env[field.envName];
+    if (value !== undefined) {
+      return { source: 'process.env', value, environmentValue: true };
+    }
+  }
+
   for (let index = dotenvSources.length - 1; index >= 0; index -= 1) {
     const source = dotenvSources[index]!;
     const value = source.values[field.envName];
@@ -191,22 +205,31 @@ function findCandidate<T>(
     }
   }
 
-  if (options.source === undefined) {
-    const value = process.env[field.envName];
-    if (value !== undefined) {
-      return { source: 'process.env', value, environmentValue: true };
-    }
+  const compiledDefault = getOwnPath(
+    schema.compiledDefaults,
+    field.propertyPath,
+  );
+  if (compiledDefault.found && compiledDefault.value !== undefined) {
+    return {
+      source: 'compiled default',
+      value: compiledDefault.value,
+      environmentValue: false,
+    };
   }
 
   if (field.hasDefault && field.defaultValue !== undefined) {
     return {
-      source: 'default',
+      source: 'inline default',
       value: field.defaultValue,
       environmentValue: false,
     };
   }
 
   return undefined;
+}
+
+function cloneResolvedValue(value: unknown): unknown {
+  return Array.isArray(value) ? [...value] : value;
 }
 
 function isFieldActive(
