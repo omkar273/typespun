@@ -1,5 +1,5 @@
 {
-  "name": "@typespun/codegen",
+  "name": "typespun-codegen",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
@@ -20,6 +20,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "typespun": "workspace:*"
+    "typescript": "6.0.3",
+    "typespun": "workspace:*",
+    "yaml": "2.9.1"
   }
 }

@@ -10,7 +10,7 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "bun run --filter typespun build && bun run --filter @typespun/codegen build",
+    "build": "bun run --filter typespun build && bun run --filter typespun-codegen build",
     "check": "bun run format:check && bun run typecheck && bun run test && bun run build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/bun": "1.4.2",
     "prettier": "3.8.1",
+    "tsup": "8.5.1",
     "typescript": "6.0.3"
   }
 }
