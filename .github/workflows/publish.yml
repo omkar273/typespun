@@ -68,29 +68,6 @@ jobs:
       - name: Check workspace and packed artifacts
         run: bun run check
 
-      - name: Prepare package versions for publish
-        run: |
-          VERSION="${{ steps.release.outputs.version }}"
-          export VERSION
-          node --input-type=module <<'EOF'
-          import { readFile, writeFile } from "node:fs/promises";
-          import { join } from "node:path";
-
-          const pkgs = ["packages/typespun/package.json", "packages/codegen/package.json"];
-
-          for (const pkg of pkgs) {
-            const path = join(process.cwd(), pkg);
-            const data = JSON.parse(await readFile(path, "utf8"));
-            data.version = process.env.VERSION;
-
-            if (pkg.endsWith("codegen/package.json") && data.dependencies?.typespun) {
-              data.dependencies.typespun = `^${process.env.VERSION}`;
-            }
-
-            await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
-          }
-          EOF
-
       - name: Validate package versions
         run: |
           typespun_runtime_version=$(bun -e "console.log(require('./packages/typespun/package.json').version)")
