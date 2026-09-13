@@ -62,17 +62,24 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Set package versions
-        run: |
-          for package in packages/typespun packages/codegen; do
-            (cd "$package" && npm version --no-git-tag-version --allow-same-version "${{ steps.release.outputs.version }}")
-          done
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Check workspace and packed artifacts
         run: bun run check
+
+      - name: Set package versions
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+
+          for package in packages/typespun packages/codegen; do
+            (cd "$package" && npm version --no-git-tag-version --allow-same-version "$VERSION")
+          done
+
+      - name: Prepare package manifests for publish
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          (cd packages/codegen && npm pkg set dependencies.typespun="^$VERSION")
 
       - name: Prepare package archives
         run: mkdir -p .release
