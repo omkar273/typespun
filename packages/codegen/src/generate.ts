@@ -1,5 +1,14 @@
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import {
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+} from 'node:fs/promises';
+import { basename, dirname, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { analyzeProgram } from './analyzer/analyze.js';
 import type { Diagnostic, FieldIR } from './contracts.js';
@@ -19,7 +28,7 @@ import {
 
 const GENERATOR_VERSION = '0.0.0';
 const PROTOCOL_VERSION = 1;
-let temporarySequence = 0;
+const TEMPORARY_ATTEMPTS = 8;
 
 export interface GenerateProjectOptions {
   readonly configPath?: string;
@@ -34,10 +43,16 @@ export interface GenerationIoDiagnostic {
   readonly message: string;
 }
 
+export interface GenerationSafetyDiagnostic {
+  readonly code: 'overlapping_paths';
+  readonly message: string;
+}
+
 export type GenerateDiagnostic =
   | Diagnostic
   | DefaultsDiagnostic
-  | GenerationIoDiagnostic;
+  | GenerationIoDiagnostic
+  | GenerationSafetyDiagnostic;
 
 export interface GenerateResult {
   readonly status: 'unchanged' | 'written' | 'stale';
@@ -56,6 +71,15 @@ export async function generateProject(
       ? {}
       : { configPath: options.configPath }),
   });
+  if (await referToSameFile(config.inputPath, config.outputPath)) {
+    return failedResult(config.outputPath, [
+      {
+        code: 'overlapping_paths',
+        message:
+          'The schema input and generated output must be different files.',
+      },
+    ]);
+  }
   const programResult = createProjectProgram(config);
   if (programResult.diagnostics.length > 0) {
     return failedResult(config.outputPath, programResult.diagnostics);
@@ -96,7 +120,7 @@ export async function generateProject(
     return failedResult(config.outputPath, defaults.errors, defaults.warnings);
   }
 
-  const portableConfig = normalizeConfiguration(config, projectDirectory);
+  const portableConfig = normalizeConfiguration(config);
   const typeImport = relativeTypeImportSpecifier(
     config.inputPath,
     config.outputPath,
@@ -222,20 +246,40 @@ async function readExisting(path: string): Promise<string | undefined> {
   }
 }
 
-async function atomicWrite(path: string, contents: string): Promise<void> {
+export async function atomicWrite(
+  path: string,
+  contents: string,
+  temporaryPathForAttempt: (attempt: number) => string = (attempt) =>
+    `${dirname(path)}/.typespun.${basename(path)}.${process.pid}.${attempt}.${randomUUID()}.tmp`,
+): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const temporaryPath = `${dirname(path)}/.typespun.${process.pid}.${temporarySequence++}.tmp`;
-  let handle;
+  let temporaryPath: string | undefined;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  for (let attempt = 0; attempt < TEMPORARY_ATTEMPTS; attempt++) {
+    const candidate = temporaryPathForAttempt(attempt);
+    try {
+      handle = await open(candidate, 'wx');
+      temporaryPath = candidate;
+      break;
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'EEXIST') continue;
+      throw error;
+    }
+  }
+  if (handle === undefined || temporaryPath === undefined) {
+    throw new Error('Could not reserve a temporary generated-output file.');
+  }
+  let renamed = false;
   try {
-    handle = await open(temporaryPath, 'wx');
     await handle.writeFile(contents, 'utf8');
     await handle.sync();
     await handle.close();
     handle = undefined;
     await rename(temporaryPath, path);
+    renamed = true;
   } finally {
     await handle?.close().catch(() => undefined);
-    await unlink(temporaryPath).catch(() => undefined);
+    if (!renamed) await unlink(temporaryPath).catch(() => undefined);
   }
 }
 
@@ -247,23 +291,66 @@ function failedResult(
   return { status: 'unchanged', outputPath, warnings, diagnostics };
 }
 
-function normalizeConfiguration(
-  config: ProjectConfigResult,
-  projectDirectory: string,
-): unknown {
+function normalizeConfiguration(config: ProjectConfigResult): unknown {
   return {
-    input: portableRelative(projectDirectory, config.inputPath),
-    output: portableRelative(projectDirectory, config.outputPath),
-    tsconfig: portableRelative(projectDirectory, config.tsconfigPath),
+    input: portableRelative(config.configDirectory, config.inputPath),
+    output: portableRelative(config.configDirectory, config.outputPath),
+    tsconfig: portableRelative(config.configDirectory, config.tsconfigPath),
     ...(config.defaultsPath === undefined
       ? {}
       : {
-          defaults: portableRelative(projectDirectory, config.defaultsPath),
+          defaults: portableRelative(
+            config.configDirectory,
+            config.defaultsPath,
+          ),
         }),
     ...(config.envPrefix === undefined ? {} : { envPrefix: config.envPrefix }),
     unknownKeys: config.unknownKeys,
     secretDefaults: config.secretDefaults,
   };
+}
+
+async function referToSameFile(
+  first: string,
+  second: string,
+): Promise<boolean> {
+  const [firstIdentity, secondIdentity] = await Promise.all([
+    fileIdentity(first),
+    fileIdentity(second),
+  ]);
+  if (
+    firstIdentity.stat !== undefined &&
+    secondIdentity.stat !== undefined &&
+    firstIdentity.stat.dev === secondIdentity.stat.dev &&
+    firstIdentity.stat.ino === secondIdentity.stat.ino
+  ) {
+    return true;
+  }
+  return firstIdentity.canonicalPath === secondIdentity.canonicalPath;
+}
+
+async function fileIdentity(path: string): Promise<{
+  canonicalPath: string;
+  stat?: Awaited<ReturnType<typeof stat>>;
+}> {
+  try {
+    return { canonicalPath: await realpath(path), stat: await stat(path) };
+  } catch {
+    let ancestor = dirname(path);
+    const remainder = [basename(path)];
+    while (true) {
+      try {
+        return {
+          canonicalPath: resolve(await realpath(ancestor), ...remainder),
+        };
+      } catch {
+        const parent = dirname(ancestor);
+        if (parent === ancestor) return { canonicalPath: resolve(path) };
+        remainder.unshift(basename(ancestor));
+        ancestor = parent;
+      }
+    }
+  }
 }
 
 function portableRelative(from: string, to: string): string {

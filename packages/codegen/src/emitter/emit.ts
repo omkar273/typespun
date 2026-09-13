@@ -66,6 +66,7 @@ function usesNodeEmittedSpecifiers(options: ts.CompilerOptions): boolean {
   return (
     options.moduleResolution === ts.ModuleResolutionKind.Node16 ||
     options.moduleResolution === ts.ModuleResolutionKind.NodeNext ||
+    options.moduleResolution === ts.ModuleResolutionKind.Bundler ||
     (options.moduleResolution === undefined &&
       (options.module === ts.ModuleKind.Node16 ||
         options.module === ts.ModuleKind.NodeNext))

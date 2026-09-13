@@ -1,7 +1,18 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import ts from 'typescript';
 import type { FieldIR } from '../contracts.js';
 import { emitGeneratedModule, relativeTypeImportSpecifier } from './emit.js';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
 
 const fields: readonly FieldIR[] = [
   {
@@ -143,4 +154,39 @@ export const loadConfig = createLoader<Config>(schema);
       ),
     ).toBe('../config.js');
   });
+
+  test.each([
+    ['config.ts', 'typespun.ts', '../config.js'],
+    ['config.mts', 'typespun.mts', '../config.mjs'],
+    ['config.cts', 'typespun.cts', '../config.cjs'],
+  ])(
+    'emits a Bundler specifier that TypeScript resolves back to %s',
+    (inputName, outputName, expected) => {
+      const directory = mkdtempSync(join(tmpdir(), 'typespun-emitter-'));
+      temporaryDirectories.push(directory);
+      const inputPath = join(directory, 'src', inputName);
+      const outputPath = join(directory, 'src/generated', outputName);
+      mkdirSync(dirname(outputPath), { recursive: true });
+      writeFileSync(inputPath, 'export interface Config {}');
+      const compilerOptions: ts.CompilerOptions = {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+
+      const specifier = relativeTypeImportSpecifier(
+        inputPath,
+        outputPath,
+        compilerOptions,
+      );
+      const resolved = ts.resolveModuleName(
+        specifier,
+        outputPath,
+        compilerOptions,
+        ts.sys,
+      ).resolvedModule;
+
+      expect(specifier).toBe(expected);
+      expect(resolved?.resolvedFileName).toBe(inputPath);
+    },
+  );
 });

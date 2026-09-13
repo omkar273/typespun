@@ -4,12 +4,13 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { generateProject } from './generate.js';
+import { atomicWrite, generateProject } from './generate.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -166,5 +167,82 @@ export interface AppConfig {
     expect(
       readFileSync(join(projectDirectory, 'src/generated/typespun.ts'), 'utf8'),
     ).toBe('// prior output\n');
+  });
+
+  test('rejects output paths that alias the input through a symlinked parent', async () => {
+    const projectDirectory = createProject();
+    symlinkSync(
+      join(projectDirectory, 'src'),
+      join(projectDirectory, 'source-alias'),
+      'dir',
+    );
+    write(
+      projectDirectory,
+      'typespun.json',
+      JSON.stringify({ output: 'source-alias/config.ts' }),
+    );
+    const inputPath = join(projectDirectory, 'src/config.ts');
+    const original = readFileSync(inputPath, 'utf8');
+
+    const result = await generateProject({ projectDirectory, mode: 'write' });
+
+    expect(result.status).toBe('unchanged');
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      'overlapping_paths',
+    ]);
+    expect(readFileSync(inputPath, 'utf8')).toBe(original);
+    expect(JSON.stringify(result.diagnostics)).not.toContain(inputPath);
+  });
+
+  test('preserves a pre-existing temp-name collision and retries another sibling', async () => {
+    const projectDirectory = createProject();
+    const outputPath = join(projectDirectory, 'generated.ts');
+    const collisionPath = join(projectDirectory, '.typespun.collision.tmp');
+    const retryPath = join(projectDirectory, '.typespun.retry.tmp');
+    writeFileSync(collisionPath, 'belongs to another process');
+
+    await atomicWrite(outputPath, 'generated contents', (attempt) =>
+      attempt === 0 ? collisionPath : retryPath,
+    );
+
+    expect(readFileSync(outputPath, 'utf8')).toBe('generated contents');
+    expect(readFileSync(collisionPath, 'utf8')).toBe(
+      'belongs to another process',
+    );
+    expect(() => statSync(retryPath)).toThrow();
+  });
+
+  test('keeps fingerprints stable for one explicit config across invocation directories', async () => {
+    const projectDirectory = createProject();
+    const configPath = join(projectDirectory, 'settings/typespun.custom.json');
+    write(
+      projectDirectory,
+      'settings/typespun.custom.json',
+      JSON.stringify({
+        input: '../src/config.ts',
+        output: '../src/generated/typespun.ts',
+        tsconfig: '../tsconfig.json',
+      }),
+    );
+    const firstInvocation = join(projectDirectory, 'first');
+    const secondInvocation = join(projectDirectory, 'second/nested');
+    mkdirSync(firstInvocation, { recursive: true });
+    mkdirSync(secondInvocation, { recursive: true });
+
+    await generateProject({
+      projectDirectory: firstInvocation,
+      configPath,
+      mode: 'write',
+    });
+    const outputPath = join(projectDirectory, 'src/generated/typespun.ts');
+    const firstOutput = readFileSync(outputPath, 'utf8');
+    rmSync(outputPath);
+    await generateProject({
+      projectDirectory: secondInvocation,
+      configPath,
+      mode: 'write',
+    });
+
+    expect(readFileSync(outputPath, 'utf8')).toBe(firstOutput);
   });
 });
