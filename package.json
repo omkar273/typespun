@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "bun run --filter typespun build && bun run --filter typespun-codegen build",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run config:check",
+    "check": "bun run build && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run config:check",
     "config:check": "bun run --filter 'typespun-example-*' config:check",
     "config:generate": "bun run --filter 'typespun-example-*' config:generate",
     "format": "oxfmt",
