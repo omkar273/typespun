@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "config:check": "typespun check",
-    "config:generate": "typespun generate",
+    "config:check": "bun ../../packages/codegen/dist/bin.js check",
+    "config:generate": "bun ../../packages/codegen/dist/bin.js generate",
     "start": "bun src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
