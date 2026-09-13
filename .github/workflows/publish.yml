@@ -14,6 +14,8 @@ on:
         default: latest
         type: string
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -49,23 +51,59 @@ jobs:
       - name: Resolve publish version
         id: release
         run: |
+          VERSION=""
+          SOURCE=""
+          SHOULD_PUBLISH="true"
+          SKIP_REASON=""
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.release-version }}"
-          else
+            SOURCE="workflow_dispatch"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+            SOURCE="tag"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            if [ -f release-version.txt ]; then
+              VERSION="$(tr -d ' \t\r\n' < release-version.txt)"
+              SOURCE="release-version.txt"
+            else
+              SHOULD_PUBLISH="false"
+              SKIP_REASON="Publish skipped: release-version.txt not found on main. Add it to request a publish."
+            fi
           fi
 
-          if [ -z "$VERSION" ]; then
-            echo "No version provided. Pass release-version in workflow_dispatch or push a tag like v0.0.1."
-            exit 1
+          if [ -z "$VERSION" ] && [ "$SHOULD_PUBLISH" != "false" ]; then
+            SHOULD_PUBLISH="false"
+            SKIP_REASON="No publish version could be resolved for this run."
+          fi
+
+          if [ "$SHOULD_PUBLISH" = "true" ]; then
+            CURRENT_TYPESPUN="$(npm view typespun version 2>/dev/null || true)"
+            CURRENT_CODEGEN="$(npm view typespun-codegen version 2>/dev/null || true)"
+
+            if [ "$CURRENT_TYPESPUN" = "$VERSION" ] && [ "$CURRENT_CODEGEN" = "$VERSION" ]; then
+              SHOULD_PUBLISH="false"
+              SKIP_REASON="Version ${VERSION} is already published for both packages."
+            fi
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+          echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "skip_reason=$SKIP_REASON" >> "$GITHUB_OUTPUT"
+
+      - name: Skip publish
+        if: steps.release.outputs.should_publish == 'false'
+        run: |
+          echo "Skipping publish."
+          echo "Reason: ${{ steps.release.outputs.skip_reason }}"
 
       - name: Install dependencies
+        if: steps.release.outputs.should_publish == 'true'
         run: bun install --frozen-lockfile
 
       - name: Prepare package versions for publish
+        if: steps.release.outputs.should_publish == 'true'
         run: |
           VERSION="${{ steps.release.outputs.version }}"
           export VERSION
@@ -89,24 +127,29 @@ jobs:
           EOF
 
       - name: Prepare package archives
+        if: steps.release.outputs.should_publish == 'true'
         run: mkdir -p .release
 
       - name: Pack typespun
+        if: steps.release.outputs.should_publish == 'true'
         working-directory: packages/typespun
         run: |
           bun pm pack --ignore-scripts
           mv typespun-*.tgz ../../.release/typespun.tgz
 
       - name: Pack typespun-codegen
+        if: steps.release.outputs.should_publish == 'true'
         working-directory: packages/codegen
         run: |
           bun pm pack --ignore-scripts
           mv typespun-codegen-*.tgz ../../.release/typespun-codegen.tgz
 
       - name: Publish typespun
+        if: steps.release.outputs.should_publish == 'true'
         run: |
           npm whoami
           npm publish .release/typespun.tgz --access public --tag "${{ steps.tag.outputs.tag }}"
 
       - name: Publish typespun-codegen
+        if: steps.release.outputs.should_publish == 'true'
         run: npm publish .release/typespun-codegen.tgz --access public --tag "${{ steps.tag.outputs.tag }}"
