@@ -82,7 +82,7 @@ export function compileDefaults(
     return { values, warnings, errors };
   }
 
-  collectUnsafeKeys(parsed, [], document.path, errors);
+  collectUnsafeKeys(parsed, [], document.path, errors, new Set());
   walkDefaults(
     parsed,
     [],
@@ -220,32 +220,52 @@ function collectUnsafeKeys(
   path: readonly string[],
   file: string,
   errors: DefaultsDiagnostic[],
+  ancestors: Set<object>,
 ): void {
+  if (!Array.isArray(value) && !isRecord(value)) {
+    return;
+  }
+
+  if (ancestors.has(value)) {
+    errors.push(
+      diagnostic(
+        'invalid_defaults_document',
+        path,
+        file,
+        'Defaults document contains a recursive alias',
+      ),
+    );
+    return;
+  }
+
+  ancestors.add(value);
   if (Array.isArray(value)) {
     for (const [index, child] of value.entries()) {
-      collectUnsafeKeys(child, [...path, String(index)], file, errors);
-    }
-    return;
-  }
-
-  if (!isRecord(value)) {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = [...path, key];
-    if (DANGEROUS_KEYS.has(key)) {
-      errors.push(
-        diagnostic(
-          'unsafe_defaults_key',
-          childPath,
-          file,
-          'Defaults path contains an unsafe key',
-        ),
+      collectUnsafeKeys(
+        child,
+        [...path, String(index)],
+        file,
+        errors,
+        ancestors,
       );
     }
-    collectUnsafeKeys(child, childPath, file, errors);
+  } else {
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = [...path, key];
+      if (DANGEROUS_KEYS.has(key)) {
+        errors.push(
+          diagnostic(
+            'unsafe_defaults_key',
+            childPath,
+            file,
+            'Defaults path contains an unsafe key',
+          ),
+        );
+      }
+      collectUnsafeKeys(child, childPath, file, errors, ancestors);
+    }
   }
+  ancestors.delete(value);
 }
 
 function compileField(

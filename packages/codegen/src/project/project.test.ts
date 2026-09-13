@@ -474,4 +474,28 @@ describe('compiled defaults', () => {
       expect(JSON.stringify(result.errors)).not.toContain('shh');
     },
   );
+
+  test('reports a redacted error for a recursive YAML alias in an ignored subtree', () => {
+    const result = compileDefaults(
+      {
+        path: 'config.yaml',
+        content: 'excluded: &loop\n  again: *loop\n',
+      },
+      fields,
+      { unknownKeys: 'ignore', secretDefaults: 'allow' },
+    );
+
+    expect(result.errors).toEqual([
+      {
+        code: 'invalid_defaults_document',
+        path: 'excluded.again',
+        file: 'config.yaml',
+        message: 'Defaults document contains a recursive alias',
+      },
+    ]);
+    expect(result.warnings).toEqual([]);
+    expect(result.values).toEqual({
+      server: { host: 'localhost', port: 3000 },
+    });
+  });
 });
