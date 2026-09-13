@@ -2,18 +2,20 @@
 
 > Declare configuration once in TypeScript, then generate the loader.
 
+![Typespun — declare configuration once, then generate the loader](docs/assets/typespun-social-card.png)
+
 [![CI](https://github.com/omkar273/typespun/actions/workflows/ci.yml/badge.svg)](https://github.com/omkar273/typespun/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-132238.svg)](LICENSE)
 [![Node.js: 22 and 24](https://img.shields.io/badge/Node.js-22%20%7C%2024-2D8C91.svg)](package.json)
 [![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-4D6FBF.svg)](package.json)
-
-![TypeScript declarations and configuration sources converging into a validated typed object](docs/assets/typespun-hero.png)
 
 Typespun turns one TypeScript interface or schema-only class into deterministic,
 committable TypeScript that resolves and validates application configuration at
 startup.
 
 ## The 30-second path
+
+![TypeScript declarations and configuration sources converging into a validated typed object](docs/assets/typespun-hero.png)
 
 Declare a configuration root:
 
