@@ -78,19 +78,6 @@ export function resolveConfig<T>(
       }
     }
   }
-  for (const entry of overrideEntries) {
-    const path = formatPath(entry.path);
-    if (entry.kind === 'container' && containerPaths.has(path)) {
-      for (const field of fields) {
-        for (const parent of field.optionalParents) {
-          if (isPathPrefix(parent, entry.path)) {
-            activeParents.add(formatPath(parent));
-          }
-        }
-      }
-    }
-  }
-
   const resolved: { field: FieldSchema; value: unknown }[] = [];
   for (const { field, candidate } of selections) {
     if (candidate !== undefined) {
@@ -220,7 +207,9 @@ function findCandidate<T>(
   }
 
   if (options.source === undefined) {
-    const value = process.env[field.envName];
+    const value = Object.hasOwn(process.env, field.envName)
+      ? process.env[field.envName]
+      : undefined;
     if (value !== undefined) {
       return { source: 'process.env', value, environmentValue: true };
     }
@@ -339,16 +328,6 @@ function optionalAncestorsAreActive(
     }
   }
   return true;
-}
-
-function isPathPrefix(
-  prefix: readonly string[],
-  path: readonly string[],
-): boolean {
-  return (
-    prefix.length <= path.length &&
-    prefix.every((segment, index) => path[index] === segment)
-  );
 }
 
 function incompatibleSchemaIssue(path: string, message: string): ConfigIssue {

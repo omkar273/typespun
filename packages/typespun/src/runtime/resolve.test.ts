@@ -223,6 +223,28 @@ describe('createLoader', () => {
     }
   });
 
+  test('ignores inherited properties while reading ambient process.env', () => {
+    const inheritedNameSchema = {
+      protocolVersion: 1,
+      fields: [
+        {
+          propertyPath: ['label'],
+          defaultsPath: ['label'],
+          envName: 'toString',
+          kind: { type: 'string' },
+          required: true,
+          secret: false,
+          hasDefault: true,
+          defaultValue: 'inline-label',
+          optionalParents: [],
+        },
+      ],
+    } as const satisfies GeneratedSchema;
+    const loadLabel = createLoader<{ label: string }>(inheritedNameSchema);
+
+    expect(loadLabel()).toEqual({ label: 'inline-label' });
+  });
+
   test('does not fall back to process.env when an explicit empty source is supplied', () => {
     const previous = process.env.TYPESPUN_ONLY_PORT;
     process.env.TYPESPUN_ONLY_PORT = '4000';
@@ -407,7 +429,7 @@ describe('createLoader', () => {
     ).toEqual({ database: { host: 'db.internal', port: 5432 } });
   });
 
-  test('activates optional ancestors for an explicit nested empty container', () => {
+  test('treats an explicit nested empty container as a merge no-op', () => {
     const loadFeatures = createLoader<{
       features?: { enabled?: boolean; database: { host?: string } };
     }>(requiredNestedContainerSchema);
@@ -417,7 +439,7 @@ describe('createLoader', () => {
         source: {},
         overrides: { features: { database: {} } },
       }),
-    ).toEqual({ features: { database: {} } });
+    ).toEqual({});
   });
 
   test('reports cyclic override objects as configuration issues', () => {
