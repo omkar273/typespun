@@ -68,12 +68,18 @@ console.log(JSON.stringify({ name: load({ source: { NAME: 'Ada' } }).name, error
       `const { ConfigError } = require('typespun');
 const { createLoader } = require('typespun/generated');
 const load = createLoader({ protocolVersion: 1, fields: [{ propertyPath: ['port'], defaultsPath: ['port'], envName: 'PORT', kind: { type: 'number' }, required: true, secret: false, hasDefault: false, optionalParents: [] }] });
-console.log(JSON.stringify({ port: load({ source: { PORT: '4100' } }).port, error: new ConfigError([]).name }));
+let sharedErrorIdentity = false;
+try {
+  load({ source: { PORT: 'invalid' } });
+} catch (error) {
+  sharedErrorIdentity = error instanceof ConfigError;
+}
+console.log(JSON.stringify({ port: load({ source: { PORT: '4100' } }).port, error: new ConfigError([]).name, sharedErrorIdentity }));
 `,
     );
 
     expect(run(['node', 'commonjs.cjs'], consumerDirectory)).toBe(
-      '{"port":4100,"error":"ConfigError"}\n',
+      '{"port":4100,"error":"ConfigError","sharedErrorIdentity":true}\n',
     );
   });
 
@@ -96,6 +102,31 @@ void load;
 
     expect(
       run([installedBinary('tsc'), '-p', 'tsconfig.json'], consumerDirectory),
+    ).toBe('');
+  });
+
+  test('CommonJS declarations resolve through the require type condition', async () => {
+    await writeFixture(
+      'commonjs-types.cts',
+      `import runtime = require('typespun');
+import generated = require('typespun/generated');
+const schema = { protocolVersion: 1, fields: [] } as const satisfies generated.GeneratedSchema;
+const load = generated.createLoader<{ ready?: boolean }>(schema);
+const issue: runtime.ConfigIssue | undefined = new runtime.ConfigError([]).issues[0];
+void issue;
+void load;
+`,
+    );
+    await writeFixture(
+      'tsconfig.commonjs.json',
+      `${JSON.stringify({ compilerOptions: { module: 'Node16', moduleResolution: 'Node16', strict: true, noEmit: true }, files: ['commonjs-types.cts'] }, null, 2)}\n`,
+    );
+
+    expect(
+      run(
+        [installedBinary('tsc'), '-p', 'tsconfig.commonjs.json'],
+        consumerDirectory,
+      ),
     ).toBe('');
   });
 
