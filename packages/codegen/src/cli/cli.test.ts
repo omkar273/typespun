@@ -121,6 +121,15 @@ describe('init', () => {
     expect(
       await readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
     ).toContain('export const loadConfig');
+
+    const generatedBefore = await readFile(
+      join(project, 'src/generated/typespun.ts'),
+      'utf8',
+    );
+    expect((await runCli(project, 'init')).exitCode).toBe(0);
+    expect(
+      await readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
+    ).toBe(generatedBefore);
   });
 
   test('supports class style and explicit paths without normalizing the requested prefix', async () => {
@@ -232,6 +241,113 @@ describe('init', () => {
     expect(await Bun.file(join(project, 'typespun.json')).exists()).toBe(false);
   });
 
+  test('refuses an app-owned output even when typespun.json names it', async () => {
+    const project = await createProject(validInterface);
+    await mkdir(join(project, 'src/generated'), { recursive: true });
+    const outputPath = join(project, 'src/generated/typespun.ts');
+    await writeFile(outputPath, '// application module\n');
+    await writeFile(
+      join(project, 'typespun.json'),
+      `${JSON.stringify({ input: 'src/config.ts', output: 'src/generated/typespun.ts' }, null, 2)}\n`,
+    );
+    const packageBefore = await readFile(join(project, 'package.json'), 'utf8');
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('refuses to overwrite');
+    expect(await readFile(outputPath, 'utf8')).toBe('// application module\n');
+    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+      packageBefore,
+    );
+  });
+
+  test('rejects an output path that aliases the schema through a symlink', async () => {
+    const project = await createProject(validInterface);
+    await mkdir(join(project, 'src/generated'), { recursive: true });
+    await symlink(
+      join(project, 'src/config.ts'),
+      join(project, 'src/generated/typespun.ts'),
+    );
+    await writeFile(
+      join(project, 'typespun.json'),
+      `${JSON.stringify({ input: 'src/config.ts', output: 'src/generated/typespun.ts' }, null, 2)}\n`,
+    );
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('must differ');
+    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
+      validInterface,
+    );
+  });
+
+  test('persists missing config paths so explicit flags cannot be ignored', async () => {
+    const project = await createBareProject();
+    await writeFile(join(project, 'typespun.json'), '{}\n');
+
+    const result = await runCli(
+      project,
+      'init',
+      '--input',
+      'settings/app.ts',
+      '--output',
+      'settings/generated.ts',
+      '--env-prefix',
+      'APP',
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      JSON.parse(await readFile(join(project, 'typespun.json'), 'utf8')),
+    ).toEqual({
+      input: 'settings/app.ts',
+      output: 'settings/generated.ts',
+      envPrefix: 'APP',
+    });
+    expect(await Bun.file(join(project, 'settings/app.ts')).exists()).toBe(
+      true,
+    );
+    expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
+  });
+
+  test('validates the configured tsconfig before creating or changing files', async () => {
+    const project = await createBareProject();
+    await mkdir(join(project, 'config'), { recursive: true });
+    await writeFile(join(project, 'config/tsconfig.json'), '{ invalid');
+    await writeFile(
+      join(project, 'typespun.json'),
+      `${JSON.stringify({ input: 'src/config.ts', tsconfig: 'config/tsconfig.json' }, null, 2)}\n`,
+    );
+    const packageBefore = await readFile(join(project, 'package.json'), 'utf8');
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('tsconfig.json');
+    expect(await Bun.file(join(project, 'src/config.ts')).exists()).toBe(false);
+    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+      packageBefore,
+    );
+  });
+
+  test('finds import-only dependencies hoisted to an ancestor node_modules', async () => {
+    const workspace = await makeDirectory();
+    const project = join(workspace, 'packages/app');
+    await mkdir(project, { recursive: true });
+    await writeFixtureManifestAndTsconfig(project);
+    await linkWorkspaceDependencies(workspace);
+
+    const result = await runCli(project, 'init');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain('Dependencies are missing');
+    expect(
+      await Bun.file(join(project, 'src/generated/typespun.ts')).exists(),
+    ).toBe(true);
+  });
+
   test('prints detected package-manager commands without executing an installer', async () => {
     const project = await createBareProject({ packageManager: 'pnpm@10.0.0' });
     const fakeBin = join(project, 'fake-bin');
@@ -271,6 +387,14 @@ async function createBareProject(
   packageFields: Record<string, unknown> = {},
 ): Promise<string> {
   const path = await makeDirectory();
+  await writeFixtureManifestAndTsconfig(path, packageFields);
+  return path;
+}
+
+async function writeFixtureManifestAndTsconfig(
+  path: string,
+  packageFields: Record<string, unknown> = {},
+): Promise<void> {
   await writeFile(
     join(path, 'package.json'),
     `${JSON.stringify({ name: 'fixture', private: true, type: 'module', ...packageFields }, null, 2)}\n`,
@@ -279,7 +403,6 @@ async function createBareProject(
     join(path, 'tsconfig.json'),
     `${JSON.stringify({ compilerOptions: { strict: true, skipLibCheck: true }, include: ['src/**/*.ts'] }, null, 2)}\n`,
   );
-  return path;
 }
 
 async function linkWorkspaceDependencies(project: string): Promise<void> {

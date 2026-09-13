@@ -1,11 +1,14 @@
-import { createRequire } from 'node:module';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import ts from 'typescript';
 import type { GenerateDiagnostic } from '../generate.js';
 import { generateProject } from '../generate.js';
-import { CONVENTIONAL_INPUTS } from '../project/discovery.js';
+import {
+  CONVENTIONAL_INPUTS,
+  discoverDefaultsPath,
+  findNearestTsconfig,
+} from '../project/discovery.js';
 
 export interface InitOptions {
   readonly style?: 'interface' | 'class';
@@ -15,7 +18,7 @@ export interface InitOptions {
 }
 
 export interface InitResult {
-  readonly exitCode: 0 | 1;
+  readonly exitCode: 0 | 1 | 2;
   readonly messages: readonly string[];
   readonly warnings: readonly string[];
   readonly diagnostics: readonly GenerateDiagnostic[];
@@ -29,7 +32,10 @@ interface PackageDocument extends Record<string, unknown> {
 interface InitConfig extends Record<string, unknown> {
   input?: string;
   output?: string;
+  tsconfig?: string;
   envPrefix?: string;
+  defaults?: unknown;
+  secretDefaults?: unknown;
 }
 
 const SCHEMA_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
@@ -47,9 +53,7 @@ export async function initializeProject(
 ): Promise<InitResult> {
   const projectDirectory = resolve(cwd);
   const packagePath = join(projectDirectory, 'package.json');
-  const tsconfigPath = join(projectDirectory, 'tsconfig.json');
   const packageDocument = readPackageDocument(packagePath);
-  validateTsconfig(tsconfigPath);
 
   const configPath = join(projectDirectory, 'typespun.json');
   const existingConfig = existsSync(configPath)
@@ -66,16 +70,17 @@ export async function initializeProject(
   validateExistingSchemaStyle(projectDirectory, input, options.style);
   const inputPath = resolve(projectDirectory, input);
   const outputPath = resolve(projectDirectory, output);
-  if (inputPath === outputPath) {
+  if (pathsReferToSameFile(inputPath, outputPath)) {
     throw new InitProjectError('Schema input and generated output must differ');
   }
-  if (existingConfig === undefined && existsSync(outputPath)) {
+  if (existsSync(outputPath) && !isTypespunGeneratedOutput(outputPath)) {
     throw new InitProjectError(
       `Initialization refuses to overwrite the existing output at ${output}`,
     );
   }
 
   const config: InitConfig = {
+    ...existingConfig,
     input,
     output,
     ...(options.envPrefix === undefined
@@ -84,15 +89,26 @@ export async function initializeProject(
         : { envPrefix: existingConfig.envPrefix }
       : { envPrefix: options.envPrefix }),
   };
+  preflightResolvedConfig(projectDirectory, config, inputPath);
+  const configNeedsMissingKeys =
+    existingConfig !== undefined &&
+    (existingConfig.input === undefined ||
+      existingConfig.output === undefined ||
+      (options.envPrefix !== undefined &&
+        existingConfig.envPrefix === undefined));
   const messages: string[] = [];
 
   if (!existsSync(inputPath)) {
     await writeNewFile(inputPath, schemaTemplate(options.style ?? 'interface'));
     messages.push(`Created ${input}.`);
   }
+  const serializedConfig = `${JSON.stringify(config, null, 2)}\n`;
   if (existingConfig === undefined) {
-    await writeNewFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    await writeNewFile(configPath, serializedConfig);
     messages.push('Created typespun.json.');
+  } else if (configNeedsMissingKeys) {
+    await writeFile(configPath, serializedConfig);
+    messages.push('Added missing paths to typespun.json.');
   }
 
   if (addMissingScripts(packageDocument)) {
@@ -124,7 +140,11 @@ export async function initializeProject(
   });
   if (generated.diagnostics.length > 0) {
     return {
-      exitCode: 1,
+      exitCode: generated.diagnostics.some(
+        (diagnostic) => diagnostic.code === 'typescript_config',
+      )
+        ? 2
+        : 1,
       messages,
       warnings: [],
       diagnostics: [...generated.warnings, ...generated.diagnostics],
@@ -177,6 +197,39 @@ function validateTsconfig(path: string): void {
     throw new InitProjectError(
       'tsconfig.json must contain usable TypeScript configuration',
     );
+  }
+}
+
+function preflightResolvedConfig(
+  projectDirectory: string,
+  config: InitConfig,
+  inputPath: string,
+): void {
+  const tsconfigPath =
+    config.tsconfig === undefined
+      ? findNearestTsconfig(inputPath)
+      : resolve(projectDirectory, config.tsconfig);
+  if (tsconfigPath === undefined) {
+    throw new InitProjectError(
+      `Could not find tsconfig.json for ${displayPath(projectDirectory, inputPath)}`,
+    );
+  }
+  validateTsconfig(tsconfigPath);
+
+  const defaults = config.defaults;
+  const hasExplicitDefaultsPath =
+    typeof defaults === 'string' ||
+    (isRecord(defaults) && typeof defaults.path === 'string');
+  if (!hasExplicitDefaultsPath) {
+    try {
+      discoverDefaultsPath(projectDirectory);
+    } catch (error) {
+      throw new InitProjectError(
+        error instanceof Error
+          ? error.message
+          : 'Defaults-file discovery failed',
+      );
+    }
   }
 }
 
@@ -277,7 +330,11 @@ function rejectConflictingOptions(
   const comparisons: Array<[string, string | undefined, string | undefined]> = [
     ['--input', options.input, existing.input ?? input],
     ['--output', options.output, existing.output ?? output],
-    ['--env-prefix', options.envPrefix, existing.envPrefix],
+    [
+      '--env-prefix',
+      options.envPrefix,
+      existing.envPrefix ?? options.envPrefix,
+    ],
   ];
   for (const [flag, requested, configured] of comparisons) {
     if (requested !== undefined && requested !== configured) {
@@ -337,18 +394,24 @@ function addMissingScripts(document: PackageDocument): boolean {
 }
 
 function missingDependencies(projectDirectory: string): string[] {
-  const require = createRequire(join(projectDirectory, 'package.json'));
-  return ['typespun', 'typespun-codegen'].filter((name) => {
-    if (isFile(join(projectDirectory, 'node_modules', name, 'package.json'))) {
-      return false;
-    }
-    try {
-      require.resolve(name);
-      return false;
-    } catch {
+  return ['typespun', 'typespun-codegen'].filter(
+    (name) => !findInstalledPackage(projectDirectory, name),
+  );
+}
+
+function findInstalledPackage(
+  projectDirectory: string,
+  packageName: string,
+): boolean {
+  let directory = resolve(projectDirectory);
+  while (true) {
+    if (isFile(join(directory, 'node_modules', packageName, 'package.json'))) {
       return true;
     }
-  });
+    const parent = dirname(directory);
+    if (parent === directory) return false;
+    directory = parent;
+  }
 }
 
 function installationGuidance(
@@ -424,6 +487,61 @@ function displayPath(projectDirectory: string, path: string): string {
   return path.startsWith(`${projectDirectory}/`)
     ? path.slice(projectDirectory.length + 1)
     : path;
+}
+
+function pathsReferToSameFile(first: string, second: string): boolean {
+  const firstIdentity = fileIdentity(first);
+  const secondIdentity = fileIdentity(second);
+  if (
+    firstIdentity.stat !== undefined &&
+    secondIdentity.stat !== undefined &&
+    firstIdentity.stat.dev === secondIdentity.stat.dev &&
+    firstIdentity.stat.ino === secondIdentity.stat.ino
+  ) {
+    return true;
+  }
+  return firstIdentity.canonicalPath === secondIdentity.canonicalPath;
+}
+
+function fileIdentity(path: string): {
+  canonicalPath: string;
+  stat?: ReturnType<typeof statSync>;
+} {
+  try {
+    return { canonicalPath: realpathSync(path), stat: statSync(path) };
+  } catch {
+    let ancestor = dirname(path);
+    const remainder = [basename(path)];
+    while (true) {
+      try {
+        return {
+          canonicalPath: resolve(realpathSync(ancestor), ...remainder),
+        };
+      } catch {
+        const parent = dirname(ancestor);
+        if (parent === ancestor) return { canonicalPath: resolve(path) };
+        remainder.unshift(basename(ancestor));
+        ancestor = parent;
+      }
+    }
+  }
+}
+
+function isTypespunGeneratedOutput(path: string): boolean {
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch {
+    return false;
+  }
+  return (
+    /^\/\/ Generated by typespun-codegen\. Do not edit\.\n\/\/ Schema fingerprint: [a-f0-9]{64}\n\n/u.test(
+      contents,
+    ) &&
+    contents.includes("from 'typespun/generated';") &&
+    contents.includes('export type Config = TypespunConfig;') &&
+    contents.includes('export const loadConfig = createLoader<Config>(schema);')
+  );
 }
 
 function isFile(path: string): boolean {
