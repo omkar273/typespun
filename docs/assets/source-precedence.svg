@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="430" viewBox="0 0 1100 430" role="img" aria-labelledby="title desc">
+  <title id="title">Typespun source precedence</title>
+  <desc id="desc">Five layers rise from inline defaults through compiled defaults, dotenv files, environment source, and typed overrides. The highest defined value wins.</desc>
+  <defs><style>.bg{fill:#f6f9fb}.s{stroke:#132238;stroke-width:2}.a{fill:#e8f4f3}.b{fill:#eaf0fc}.c{fill:#fff}.h{font:700 22px ui-sans-serif,system-ui,sans-serif;fill:#132238}.t{font:500 16px ui-sans-serif,system-ui,sans-serif;fill:#53657a}.n{font:700 15px ui-monospace,SFMono-Regular,monospace;fill:#132238}</style></defs>
+  <rect class="bg" width="1100" height="430" rx="24"/>
+  <text x="60" y="52" class="h">Highest defined value wins</text>
+  <g class="s">
+    <rect x="60" y="82" width="980" height="56" rx="10" class="a"/><rect x="90" y="148" width="950" height="56" rx="10" class="b"/><rect x="120" y="214" width="920" height="56" rx="10" class="c"/><rect x="150" y="280" width="890" height="56" rx="10" class="b"/><rect x="180" y="346" width="860" height="56" rx="10" class="c"/>
+  </g>
+  <text x="85" y="117" class="n">1</text><text x="125" y="117" class="h">typed overrides</text>
+  <text x="115" y="183" class="n">2</text><text x="155" y="183" class="h">source</text><text x="545" y="183" class="t">explicit record, or process.env when omitted</text>
+  <text x="145" y="249" class="n">3</text><text x="185" y="249" class="h">dotenv files</text><text x="545" y="249" class="t">later entries override earlier entries</text>
+  <text x="175" y="315" class="n">4</text><text x="215" y="315" class="h">compiled defaults</text><text x="545" y="315" class="t">validated JSON or YAML embedded at generation</text>
+  <text x="205" y="381" class="n">5</text><text x="245" y="381" class="h">inline defaults</text><text x="545" y="381" class="t">JSDoc, decorator, or class initializer</text>
+</svg>

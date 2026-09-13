@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Typespun project mark</title>
+  <desc id="desc">Five threads converge through a spindle into typed brackets.</desc>
+  <g fill="none" stroke="#132238" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12h9c8 0 9 12 18 12"/>
+    <path d="M5 24h11c6 0 8 4 16 4"/>
+    <path d="M5 36h11c6 0 8-4 16-4"/>
+    <path d="M5 48h9c8 0 9-12 18-12"/>
+    <circle cx="34" cy="30" r="4" fill="#132238" stroke="none"/>
+    <path d="M48 15h-5c-4 0-5 3-5 7v20c0 4 1 7 5 7h5M54 15h5v34h-5"/>
+  </g>
+</svg>

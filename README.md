@@ -1,166 +1,182 @@
 # Typespun
 
-Typespun turns a TypeScript interface or schema-only class into a small, typed
-configuration loader. It combines committed defaults, dotenv files,
-environment-shaped records, and typed overrides without mutating
-`process.env`.
+> Declare configuration once in TypeScript, then generate the loader.
+
+[![CI](https://github.com/omkar273/typespun/actions/workflows/ci.yml/badge.svg)](https://github.com/omkar273/typespun/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-132238.svg)](LICENSE)
+[![Node.js: 22 and 24](https://img.shields.io/badge/Node.js-22%20%7C%2024-2D8C91.svg)](package.json)
+[![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-4D6FBF.svg)](package.json)
+
+![TypeScript declarations and configuration sources converging into a validated typed object](docs/assets/typespun-hero.png)
+
+Typespun turns one TypeScript interface or schema-only class into deterministic,
+committable TypeScript that resolves and validates application configuration at
+startup.
+
+## The 30-second path
+
+Declare a configuration root:
+
+```ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  /** @secret */
+  databaseUrl: string;
+}
+```
+
+Configure and generate it:
+
+```json
+{
+  "input": "src/config.ts",
+  "output": "src/generated/typespun.ts",
+  "envPrefix": "APP"
+}
+```
+
+```json
+{
+  "scripts": {
+    "config:generate": "typespun generate",
+    "config:check": "typespun check"
+  }
+}
+```
+
+```sh
+bun run config:generate
+```
+
+Load the generated, typed configuration:
+
+```ts
+import { loadConfig } from './generated/typespun.js';
+
+const config = loadConfig({
+  envFiles: [{ path: '.env', optional: true }],
+});
+
+console.log(config.server.port); // number
+```
 
 ## Install
+
+The package manifests are prepared for npm, but Typespun has not published its
+first release yet. After that release:
 
 ```sh
 bun add typespun
 bun add --dev typespun-codegen
 ```
 
-Node package managers can install the same two packages. Typespun supports
-Node.js 22 and 24 and Bun 1.4.1 or newer. Schema declarations are TypeScript
-only; JavaScript schemas are not supported.
+Equivalent installs are `npm install typespun && npm install --save-dev
+typespun-codegen` or `pnpm add typespun && pnpm add --save-dev
+typespun-codegen`. Today, clone this repository and run the included examples
+with `bun install --frozen-lockfile`.
 
-Initialize a project and generate its first loader:
+Supported engines are Bun 1.4.1 or newer and Node.js 22 or 24. CI exercises the
+packed packages with Bun and both Node.js lines.
 
-```sh
-bunx typespun init
-bun run config:generate
-```
+## Why Typespun?
 
-`typespun init --style class` creates a class declaration instead. The command
-also adds `config:generate` and `config:check` scripts when they are missing.
+Configuration often describes the same field three times: as a TypeScript type,
+an environment parser, and a validation schema. Those copies drift. Typespun
+uses the TypeScript declaration as the build-time source of truth and emits the
+small runtime loader your application imports.
 
-## Interface schemas
+- Interfaces are concise; decorated classes offer literal defaults.
+- Generated TypeScript is deterministic and intended for version control.
+- Resolution order is fixed and visible.
+- Missing and invalid values are reported together at startup.
+- Fields marked secret omit received values from Typespun diagnostics.
 
-Interfaces use JSDoc annotations and are the recommended default:
+## How it works
 
-```ts
-export enum Stage {
-  Development = 'development',
-  Production = 'production',
-}
+![Typespun compiler and runtime architecture](docs/assets/architecture.svg)
 
-/** @typespun */
-export interface AppConfig {
-  server: {
-    host: string;
-    port: number;
-  };
-  stage: Stage;
-  /** @env DATABASE_URL */
-  databaseUrl?: string;
-  /** @secret */
-  token: string;
-}
-```
+1. `typespun generate` loads `typespun.json` and the selected `tsconfig.json`.
+2. The compiler finds exactly one exported `@typespun` interface or `@Config()`
+   class and statically analyzes its fields.
+3. Optional JSON/YAML defaults are validated and embedded.
+4. A stable schema fingerprint and `loadConfig()` module are written atomically.
+5. At runtime, `loadConfig()` selects the highest-precedence value for every
+   field, coerces environment strings, and either returns `Config` or throws one
+   `ConfigError`.
 
-Fields support `@env NAME`, `@key name`, `@default <JSON>`, `@secret`, and
-`@ignore`. Unannotated environment names come from property paths and the
-optional project prefix.
+## Supported declarations
 
-## Class schemas
+Typespun supports nested object shapes whose leaves are `string`, finite
+`number`, `boolean`, string-literal unions or string enums, and arrays of
+`string`, `number`, or `boolean`. Optional properties and optional object
+branches are supported.
 
-Classes use inert decorators. They describe a schema; Typespun never
-instantiates the class or runs constructors, methods, getters, or setters.
+Use JSDoc on interfaces (`@typespun`, `@env`, `@key`, `@default`, `@secret`,
+`@ignore`) or the corresponding inert decorators on classes (`Config`, `Env`,
+`Key`, `Default`, `Secret`, `Ignore`). JavaScript schemas, nullable unions,
+tuples, records/index signatures, dates, maps, sets, methods, computed fields,
+and recursive shapes are not supported.
 
-```ts
-import { Config, Env, Secret } from 'typespun';
+See [declarations](docs/concepts/declarations.md) and the
+[annotation reference](docs/api/decorators-and-annotations.md).
 
-@Config()
-export class AppConfig {
-  port = 3000;
+## Source precedence
 
-  @Env('SERVICE_HOST')
-  host = '127.0.0.1';
+Highest precedence wins:
 
-  @Secret()
-  token!: string;
-}
-```
+1. typed `overrides`
+2. explicit `source`, or `process.env` when `source` is omitted
+3. dotenv files, later entries over earlier entries
+4. compiled JSON/YAML defaults
+5. inline defaults
 
-Class fields support `@Default(value)`, `@Env(name)`, `@Key(name)`, `@Secret()`,
-and `@Ignore()`. Inline defaults must be statically readable literals.
+Passing `source: {}` deliberately disables the ambient `process.env` fallback.
+Dotenv files are parsed without mutating `process.env`.
 
-## Project configuration
+See [source precedence](docs/concepts/source-precedence.md).
 
-`typespun.json` lives at the project root. Paths are resolved from its
-directory.
+## Generated code, validation, and secrets
 
-```json
-{
-  "input": "src/config.ts",
-  "output": "src/generated/typespun.ts",
-  "envPrefix": "APP",
-  "defaults": {
-    "path": "config/config.yaml",
-    "unknownKeys": "error"
-  },
-  "secretDefaults": "warn"
-}
-```
+Commit the generated module and run `bun run config:check` in CI. `check` does
+not write files; it exits nonzero if output is missing or stale. Generation is
+byte-stable for the same schema, project settings, defaults, and generator
+version.
 
-`input`, `output`, and `tsconfig` may be explicit. Without an input or defaults
-path, Typespun uses its project conventions. Defaults may be JSON or YAML.
-Unknown defaults keys use `error` by default and can be changed to `warn` or
-`ignore`. Secret defaults use `warn` by default and can be changed to `error`
-or `allow`.
+Runtime errors are aggregated in `ConfigError.issues`. For a secret field, an
+invalid-value issue includes the path and environment key but excludes the
+received value and type-specific details that could reveal allowed secrets.
+Typespun cannot redact values logged by your application or another library,
+and generated defaults are committed—do not place secrets there.
 
-Generate and commit the output:
+Read [generated code](docs/concepts/generated-code.md) and
+[validation and redaction](docs/concepts/validation-and-redaction.md).
 
-```sh
-bun run config:generate
-git add src/generated/typespun.ts
-```
+## Compatibility and maturity
 
-The generated module exports only the configuration type and loader:
+The `typespun` runtime is configured with ESM and CommonJS entry points. Generated `.ts`,
+`.mts`, and `.cts` modules use import specifiers derived from the selected
+TypeScript module settings. The `typespun-codegen` package and CLI are ESM.
 
-```ts
-import { loadConfig, type Config } from './generated/typespun.js';
+Typespun is pre-release software at version `0.1.0`; its packages are not yet on
+npm. The current scope is intentionally narrow: synchronous environment,
+dotenv, defaults-file, and override resolution; one configuration root per
+project; no provider plugin system or runtime JSON/YAML source.
 
-const config: Config = loadConfig({
-  envFiles: ['.env', { path: '.env.local', optional: true }],
-  source: process.env,
-  overrides: { server: { port: 4000 } },
-});
-```
+## Documentation
 
-Configuration precedence, from lowest to highest, is:
+- [Getting started](docs/getting-started.md)
+- [Runtime API](docs/api/runtime.md)
+- [Generated loader API](docs/api/generated-loader.md)
+- [CLI reference](docs/api/cli.md)
+- [`typespun.json` reference](docs/reference/configuration.md)
+- [Runnable interface example](examples/interface)
+- [Runnable class example](examples/class)
 
-1. Inline interface/class defaults.
-2. Compiled JSON or YAML defaults.
-3. Dotenv files, with later files winning.
-4. `source`, such as `process.env` or a test-owned record.
-5. Typed `overrides`.
+## Project
 
-Omitting `source` reads `process.env`; passing `source: {}` explicitly disables
-ambient environment input. Loading is synchronous and returns a fresh plain
-object.
-
-## Errors and security
-
-Invalid or missing configuration throws one `ConfigError` containing every
-issue. Each issue has a stable code and field path. Secret fields never include
-their received values in Typespun diagnostics.
-
-Defaults and generated files are intended for non-secret values and are
-committed. Keep `.env` files and credentials out of version control; commit
-only placeholder files such as `.env.example`. Typespun parses dotenv files
-without changing `process.env`.
-
-## CI
-
-Generated files are part of the source tree. Reject stale output in CI:
-
-```sh
-bun run config:check
-```
-
-This repository's `bun run check` formats, lints, typechecks, builds, tests the
-workspace and installed package tarballs, and checks both examples. CI also
-runs the packed ESM/CommonJS consumers on Node.js 22 and 24.
-
-See [`examples/interface`](examples/interface) and
-[`examples/class`](examples/class) for executable projects.
-
-## Community
-
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change.
-- Use [SUPPORT.md](SUPPORT.md) for bugs, features, and usage questions.
-- Report vulnerabilities through [SECURITY.md](SECURITY.md).
-- Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+- Contributions: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Support: [SUPPORT.md](SUPPORT.md)
+- Security reports: [SECURITY.md](SECURITY.md)
+- Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- License: [MIT](LICENSE)
