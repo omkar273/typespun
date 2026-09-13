@@ -1,11 +1,32 @@
 {
   "name": "typespun-codegen",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "TypeScript schema analyzer, generator, and CLI for Typespun",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omkar273/typespun.git",
+    "directory": "packages/codegen"
+  },
+  "homepage": "https://github.com/omkar273/typespun#readme",
+  "bugs": "https://github.com/omkar273/typespun/issues",
+  "keywords": [
+    "code-generation",
+    "configuration",
+    "typescript",
+    "typed-config"
+  ],
+  "engines": {
+    "node": ">=22",
+    "bun": ">=1.4.1"
+  },
+  "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/testing",
+    "!dist/.tsbuildinfo"
   ],
   "bin": {
     "typespun": "./dist/bin.js"
@@ -21,6 +42,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "typescript": "6.0.3",

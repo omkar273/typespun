@@ -4,6 +4,12 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omkar273/typespun.git"
+  },
+  "homepage": "https://github.com/omkar273/typespun#readme",
+  "bugs": "https://github.com/omkar273/typespun/issues",
   "packageManager": "bun@1.4.1",
   "workspaces": [
     "packages/*",
@@ -11,12 +17,16 @@
   ],
   "scripts": {
     "build": "bun run --filter typespun build && bun run --filter typespun-codegen build",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run config:check",
+    "config:check": "bun run --filter 'typespun-example-*' config:check",
+    "config:generate": "bun run --filter 'typespun-example-*' config:generate",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun run build && bun run test:unit && bun run test:package",
+    "test:package": "bun test tests/package/package.test.ts tests/consumer/consumer.test.ts",
+    "test:unit": "bun test packages/typespun/src packages/codegen/src --pass-with-no-tests",
     "typecheck": "bun run --workspaces --if-present typecheck"
   },
   "devDependencies": {

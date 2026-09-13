@@ -45,6 +45,26 @@ The workspace is organized as follows:
 5. Update documentation and examples when public behavior changes.
 6. Run `bun run check` before opening a pull request.
 
+When changing schema analysis or emitted output, regenerate and verify the
+committed examples:
+
+```sh
+bun run config:generate
+bun run config:check
+```
+
+When changing exports, dependencies, build output, or the CLI, validate the
+actual publish artifacts rather than importing workspace source:
+
+```sh
+bun run build
+bun run test:package
+```
+
+The package fixtures create tarballs, install them in temporary consumers, and
+exercise ESM, CommonJS, declarations, and the CLI. Keep package inputs out of
+these fixtures so workspace resolution cannot mask a publishing regression.
+
 Avoid unrelated formatting or refactoring in the same change. Never commit
 credentials, real environment files, access tokens, or production configuration.
 

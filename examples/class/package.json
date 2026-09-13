@@ -1,0 +1,19 @@
+{
+  "name": "typespun-example-class",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "config:check": "typespun check",
+    "config:generate": "typespun generate",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "typespun": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "typespun-codegen": "workspace:*"
+  }
+}

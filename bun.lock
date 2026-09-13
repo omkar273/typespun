@@ -11,9 +11,34 @@
         "typescript": "6.0.3",
       },
     },
+    "examples/class": {
+      "name": "typespun-example-class",
+      "version": "0.0.0",
+      "dependencies": {
+        "typespun": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "6.0.3",
+        "typespun-codegen": "workspace:*",
+      },
+    },
+    "examples/interface": {
+      "name": "typespun-example-interface",
+      "version": "0.0.0",
+      "dependencies": {
+        "typespun": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "6.0.3",
+        "typespun-codegen": "workspace:*",
+      },
+    },
     "packages/codegen": {
       "name": "typespun-codegen",
-      "version": "0.0.0",
+      "version": "0.1.0",
+      "bin": {
+        "typespun": "./dist/bin.js",
+      },
       "dependencies": {
         "typescript": "6.0.3",
         "typespun": "workspace:*",
@@ -22,7 +47,7 @@
     },
     "packages/typespun": {
       "name": "typespun",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "dotenv": "17.4.2",
       },
@@ -321,6 +346,10 @@
     "typespun": ["typespun@workspace:packages/typespun"],
 
     "typespun-codegen": ["typespun-codegen@workspace:packages/codegen"],
+
+    "typespun-example-class": ["typespun-example-class@workspace:examples/class"],
+
+    "typespun-example-interface": ["typespun-example-interface@workspace:examples/interface"],
 
     "ufo": ["ufo@1.6.4", "", {}, "sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA=="],
 

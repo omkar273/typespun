@@ -20,17 +20,29 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check formatting
-        run: bun run format:check
+      - name: Check workspace and packed artifacts
+        run: bun run check
 
-      - name: Lint
-        run: bun run lint
+  node-consumers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - name: Test
-        run: bun run test
-
-      - name: Build
+      - name: Build packages
         run: bun run build
+
+      - name: Test packed artifacts with Node.js
+        run: bun test tests/consumer/consumer.test.ts

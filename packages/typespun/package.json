@@ -1,9 +1,27 @@
 {
   "name": "typespun",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Typed, generated configuration loading for TypeScript",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omkar273/typespun.git",
+    "directory": "packages/typespun"
+  },
+  "homepage": "https://github.com/omkar273/typespun#readme",
+  "bugs": "https://github.com/omkar273/typespun/issues",
+  "keywords": [
+    "configuration",
+    "environment",
+    "typescript",
+    "typed-config"
+  ],
+  "engines": {
+    "node": ">=22",
+    "bun": ">=1.4.1"
+  },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -24,6 +42,9 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit --types bun"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "dotenv": "17.4.2"

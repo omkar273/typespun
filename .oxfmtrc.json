@@ -3,5 +3,11 @@
   "printWidth": 80,
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["dist", "coverage", "node_modules", "packages/*/dist"]
+  "ignorePatterns": [
+    "dist",
+    "coverage",
+    "node_modules",
+    "packages/*/dist",
+    "examples/*/src/generated/**"
+  ]
 }
