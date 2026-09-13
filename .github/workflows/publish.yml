@@ -71,16 +71,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build packages
-        run: bun run build
+      - name: Check workspace and packed artifacts
+        run: bun run check
+
+      - name: Prepare package archives
+        run: mkdir -p .release
+
+      - name: Pack typespun
+        working-directory: packages/typespun
+        run: bun pm pack --filename ../../.release/typespun.tgz --ignore-scripts
+
+      - name: Pack typespun-codegen
+        working-directory: packages/codegen
+        run: bun pm pack --filename ../../.release/typespun-codegen.tgz --ignore-scripts
 
       - name: Publish typespun
         run: |
-          cd packages/typespun
           npm whoami
-          npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+          npm publish .release/typespun.tgz --access public --tag "${{ steps.tag.outputs.tag }}"
 
       - name: Publish typespun-codegen
-        run: |
-          cd packages/codegen
-          npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+        run: npm publish .release/typespun-codegen.tgz --access public --tag "${{ steps.tag.outputs.tag }}"

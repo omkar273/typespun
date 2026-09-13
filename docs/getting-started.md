@@ -9,9 +9,8 @@ runs on the supported Node.js versions.
 - TypeScript 6
 - An ESM TypeScript project with `package.json` and `tsconfig.json`
 
-Typespun is currently pre-release and not yet published to npm. The install
-commands below are the intended post-release workflow; to run it today, use the
-[workspace example](../examples/interface).
+Typespun is published at version 0.1.0 and remains pre-release software. Pin the
+version if you need reproducible early adoption.
 
 ## 1. Install both packages
 
@@ -152,8 +151,12 @@ try {
   loadConfig({ envFiles: ['.env'], source: {} });
 } catch (error) {
   if (error instanceof ConfigError) {
-    console.error(error.message); // Configuration validation failed
-    console.error(error.issues);
+    console.error(error.message);
+    for (const issue of error.issues) {
+      console.error(
+        `${issue.code} ${issue.path} (${issue.envKey ?? 'n/a'}): ${issue.message}`,
+      );
+    }
   }
 }
 ```

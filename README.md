@@ -55,16 +55,17 @@ Load the generated, typed configuration:
 import { loadConfig } from './generated/typespun.js';
 
 const config = loadConfig({
-  envFiles: [{ path: '.env', optional: true }],
+  source: {
+    APP_SERVER_HOST: '127.0.0.1',
+    APP_SERVER_PORT: '3000',
+    APP_DATABASE_URL: 'postgres://localhost/example',
+  },
 });
 
-console.log(config.server.port); // number
+console.log(config.server.port); // 3000, typed as number
 ```
 
 ## Install
-
-The package manifests are prepared for npm, but Typespun has not published its
-first release yet. After that release:
 
 ```sh
 bun add typespun
@@ -73,8 +74,7 @@ bun add --dev typespun-codegen
 
 Equivalent installs are `npm install typespun && npm install --save-dev
 typespun-codegen` or `pnpm add typespun && pnpm add --save-dev
-typespun-codegen`. Today, clone this repository and run the included examples
-with `bun install --frozen-lockfile`.
+typespun-codegen`.
 
 Supported engines are Bun 1.4.1 or newer and Node.js 22 or 24. CI exercises the
 packed packages with Bun and both Node.js lines.
@@ -158,10 +158,10 @@ The `typespun` runtime is configured with ESM and CommonJS entry points. Generat
 `.mts`, and `.cts` modules use import specifiers derived from the selected
 TypeScript module settings. The `typespun-codegen` package and CLI are ESM.
 
-Typespun is pre-release software at version `0.1.0`; its packages are not yet on
-npm. The current scope is intentionally narrow: synchronous environment,
-dotenv, defaults-file, and override resolution; one configuration root per
-project; no provider plugin system or runtime JSON/YAML source.
+Typespun is published as pre-release software at version `0.1.0`. The current
+scope is intentionally narrow: synchronous environment, dotenv, defaults-file,
+and override resolution; one configuration root per project; no provider plugin
+system or runtime JSON/YAML source.
 
 ## Documentation
 
