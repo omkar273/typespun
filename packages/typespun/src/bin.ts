@@ -55,24 +55,30 @@ function resolveCodegenBinary(start: string): string | undefined {
 }
 
 async function runFallback(args: string[]): Promise<number> {
-  const bunxAttempt = await runIfAvailable('bunx', [
-    '--package',
-    'typespun-codegen',
-    'typespun-codegen',
-    ...args,
-  ]);
-  if (bunxAttempt !== null) {
-    return bunxAttempt;
+  const cliNames = ['typespun-codegen', 'typespun'];
+
+  for (const cliName of cliNames) {
+    const bunxAttempt = await runIfAvailable('bunx', [
+      '--package',
+      'typespun-codegen',
+      cliName,
+      ...args,
+    ]);
+    if (bunxAttempt !== null) {
+      return bunxAttempt;
+    }
   }
 
-  const npxAttempt = await runIfAvailable('npx', [
-    '--yes',
-    '--package=typespun-codegen',
-    'typespun-codegen',
-    ...args,
-  ]);
-  if (npxAttempt !== null) {
-    return npxAttempt;
+  for (const cliName of cliNames) {
+    const npxAttempt = await runIfAvailable('npx', [
+      '--yes',
+      '--package=typespun-codegen',
+      cliName,
+      ...args,
+    ]);
+    if (npxAttempt !== null) {
+      return npxAttempt;
+    }
   }
 
   process.stderr.write(
