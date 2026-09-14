@@ -130,6 +130,12 @@ jobs:
           }
           EOF
 
+      - name: Build packages before publish
+        if: steps.release.outputs.should_publish == 'true'
+        run: |
+          bun run --filter typespun build
+          bun run --filter typespun-codegen build
+
       - name: Prepare package archives
         if: steps.release.outputs.should_publish == 'true'
         run: mkdir -p .release
