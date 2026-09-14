@@ -17,6 +17,7 @@ Init options:
   --input <path>
   --output <path>
   --env-prefix <prefix>
+  --interactive             Ask for missing optional values in an interactive terminal
 
 Generate/check options:
   --config <path>
@@ -133,6 +134,7 @@ function parseInitArguments(args: readonly string[]): InitOptions {
     input?: string;
     output?: string;
     envPrefix?: string;
+    interactive?: boolean;
   } = {};
   for (let index = 0; index < args.length; index++) {
     const argument = args[index]!;
@@ -162,6 +164,10 @@ function parseInitArguments(args: readonly string[]): InitOptions {
         requiredValue(args, ++index, argument),
         argument,
       );
+    } else if (argument === '--interactive') {
+      options.interactive = true;
+    } else if (argument === '--no-interactive') {
+      options.interactive = false;
     } else {
       throw new UsageError(`Unknown option: ${argument}`);
     }

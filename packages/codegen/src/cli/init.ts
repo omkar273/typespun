@@ -7,6 +7,7 @@ import {
 } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import ts from 'typescript';
 import type { GenerateDiagnostic } from '../generate.js';
 import { generateProject } from '../generate.js';
@@ -21,6 +22,7 @@ export interface InitOptions {
   readonly input?: string;
   readonly output?: string;
   readonly envPrefix?: string;
+  readonly interactive?: boolean;
 }
 
 export interface InitResult {
@@ -67,6 +69,10 @@ export async function initializeProject(
   const existingConfig = existsSync(configPath)
     ? readInitConfig(configPath)
     : undefined;
+  const shouldPrompt =
+    options.interactive !== undefined
+      ? options.interactive
+      : process.stdin.isTTY === true && process.env.CI !== 'true';
   const input = selectInput(projectDirectory, options, existingConfig);
   const output =
     options.output ??
@@ -79,6 +85,17 @@ export async function initializeProject(
   const inputPath = resolve(projectDirectory, input);
   const outputPath = resolve(projectDirectory, output);
   const inputNeedsCreation = !existsSync(inputPath);
+  const style = inputNeedsCreation
+    ? await resolveStyle(options.style, shouldPrompt)
+    : (options.style ?? 'interface');
+  const envPrefix =
+    options.envPrefix === undefined
+      ? await resolveEnvPrefix(
+          options.envPrefix,
+          existingConfig?.envPrefix,
+          shouldPrompt,
+        )
+      : options.envPrefix;
   if (pathsReferToSameFile(inputPath, outputPath)) {
     throw new InitProjectError('Schema input and generated output must differ');
   }
@@ -105,11 +122,7 @@ export async function initializeProject(
     ...existingConfig,
     input,
     output,
-    ...(options.envPrefix === undefined
-      ? existingConfig?.envPrefix === undefined
-        ? {}
-        : { envPrefix: existingConfig.envPrefix }
-      : { envPrefix: options.envPrefix }),
+    ...(envPrefix === undefined ? {} : { envPrefix }),
   };
   preflightResolvedConfig(projectDirectory, config, inputPath);
   const configNeedsMissingKeys =
@@ -121,7 +134,7 @@ export async function initializeProject(
   const messages: string[] = [];
 
   if (inputNeedsCreation) {
-    await writeNewFile(inputPath, schemaTemplate(options.style ?? 'interface'));
+    await writeNewFile(inputPath, schemaTemplate(style));
     messages.push(`Created ${input}.`);
   }
   if (createDefaults) {
@@ -213,6 +226,50 @@ function readPackageDocument(path: string): PackageDocument {
     throw new InitProjectError('package.json scripts must contain an object');
   }
   return value as PackageDocument;
+}
+
+async function resolveStyle(
+  style: 'interface' | 'class' | undefined,
+  shouldPrompt: boolean,
+): Promise<'interface' | 'class'> {
+  if (style !== undefined) return style;
+  if (!shouldPrompt) return 'interface';
+  while (true) {
+    const answer = await promptLine(
+      'Which schema style would you like for config? [interface/class] (default: interface): ',
+    );
+    if (answer.length === 0) return 'interface';
+    if (answer === 'interface' || answer === 'class') return answer;
+    process.stderr.write('Please answer "interface" or "class"\n');
+  }
+}
+
+async function resolveEnvPrefix(
+  provided: string | undefined,
+  existing: string | undefined,
+  shouldPrompt: boolean,
+): Promise<string | undefined> {
+  if (provided !== undefined || existing !== undefined) {
+    return provided ?? existing;
+  }
+  if (!shouldPrompt) return undefined;
+  const answer = await promptLine(
+    'Optional environment variable prefix (leave blank to skip): ',
+  );
+  return answer.length === 0 ? undefined : answer;
+}
+
+async function promptLine(question: string): Promise<string> {
+  const input = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    const value = await input.question(question);
+    return value.trim();
+  } finally {
+    input.close();
+  }
 }
 
 function validateTsconfig(path: string): void {

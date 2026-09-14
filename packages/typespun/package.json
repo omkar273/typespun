@@ -22,6 +22,9 @@
     "bun": ">=1.4.1"
   },
   "sideEffects": false,
+  "bin": {
+    "typespun": "dist/bin.js"
+  },
   "files": [
     "dist",
     "!dist/.tsbuildinfo"
