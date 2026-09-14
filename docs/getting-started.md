@@ -44,7 +44,8 @@ Run the remaining commands from the directory containing those files.
 
 Install `typespun` as an application dependency and `typespun-codegen` as a
 development dependency. The generator package installs an executable named
-`typespun`:
+`typespun-codegen`, and `typespun` acts as the wrapper command when runtime is
+installed:
 
 ```sh
 bun add typespun
@@ -240,8 +241,17 @@ analysis fails. Unusable CLI arguments or project/TypeScript configuration exit
 
 ### The CLI command is not found
 
-Install `typespun-codegen` as a dev dependency and invoke it through the package
-script. The runtime package alone does not provide a binary.
+From the project root, use the installed runtime wrapper:
+
+```sh
+bun typespun --help
+```
+
+If you want to run the generator directly without the runtime package, use:
+
+```sh
+bunx --package typespun-codegen typespun-codegen --help
+```
 
 ### No schema is found
 

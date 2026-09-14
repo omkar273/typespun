@@ -4,14 +4,15 @@
   examples as the source of truth, in that order.
 - Keep the root README scannable and init-first. Put exhaustive behavior in the
   focused pages under `concepts/`, `api/`, and `reference/`.
-- Show both packages in installation instructions: `typespun` is the runtime;
-  `typespun-codegen` supplies the `typespun` executable.
+- Show both packages in installation instructions: `typespun` is the runtime; it
+  also provides the short `typespun` wrapper command, while
+  `typespun-codegen` provides the direct `typespun-codegen` executable.
 - Do not describe `npx typespun init` as a zero-install command. It is the local
-  executable after `typespun-codegen` has been installed. For a zero-install npm
+  wrapper command after `typespun` is installed. For a zero-install npm
   invocation, name `typespun-codegen` explicitly.
 - Prefer `bun typespun init` for an installed Bun project and
-  `npx typespun init` for an installed npm project; both resolve the executable
-  provided by `typespun-codegen`.
+  `npx typespun init` for an installed npm project; this runs the local runtime
+  wrapper, while direct no-install npm usage uses `npx typespun-codegen`.
 - Keep examples internally consistent from declaration through generation and
   runtime loading. Never invent APIs, flags, environment-variable names, or
   compatibility claims.

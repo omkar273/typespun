@@ -58,7 +58,7 @@ async function runFallback(args: string[]): Promise<number> {
   const bunxAttempt = await runIfAvailable('bunx', [
     '--package',
     'typespun-codegen',
-    'typespun',
+    'typespun-codegen',
     ...args,
   ]);
   if (bunxAttempt !== null) {
@@ -68,7 +68,7 @@ async function runFallback(args: string[]): Promise<number> {
   const npxAttempt = await runIfAvailable('npx', [
     '--yes',
     '--package=typespun-codegen',
-    'typespun',
+    'typespun-codegen',
     ...args,
   ]);
   if (npxAttempt !== null) {

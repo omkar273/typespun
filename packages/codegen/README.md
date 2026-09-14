@@ -4,7 +4,7 @@
 
 # typespun-codegen
 
-The TypeScript compiler and `typespun` command-line tool for
+The TypeScript compiler and `typespun-codegen` command-line tool for
 [Typespun](https://github.com/omkar273/typespun). It initializes a project,
 analyzes one TypeScript configuration declaration, and emits a deterministic
 loader for the separate [`typespun`](https://www.npmjs.com/package/typespun)
@@ -13,8 +13,9 @@ runtime package.
 [![npm](https://img.shields.io/npm/v/typespun-codegen.svg)](https://www.npmjs.com/package/typespun-codegen)
 [![license](https://img.shields.io/npm/l/typespun-codegen.svg)](LICENSE)
 
-The package name is `typespun-codegen`; the executable it provides is
-`typespun`. There is no supported programmatic compiler API in version 0.1.
+The package name is `typespun-codegen`; its direct executable is
+`typespun-codegen`. There is no supported programmatic compiler API in version
+0.1.
 
 ## Start with `init`
 
@@ -57,8 +58,8 @@ You can scaffold before installing either package with a package-qualified
 zero-install command:
 
 ```sh
-bunx --package typespun-codegen typespun init
-npx --package=typespun-codegen typespun init
+bunx --package typespun-codegen typespun-codegen init
+npx --package=typespun-codegen typespun-codegen init
 ```
 
 In that case, `init` creates the project files and exits successfully but does
@@ -73,8 +74,15 @@ bun add --dev typespun-codegen
 bun run config:generate
 ```
 
-The installed `bun typespun init` and `npx typespun init` flows are shorter and
-generate immediately because both dependencies are already present.
+The shortest installed workflow is:
+
+```sh
+bun add typespun
+bun add --dev typespun-codegen
+bun typespun init --env-prefix APP
+```
+
+After this, both dependencies are local and generation happens immediately.
 
 `init` preserves existing scripts and initialized files. Re-running it is
 byte-stable. It refuses conflicting options, input/output aliases, and an

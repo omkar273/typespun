@@ -1,19 +1,22 @@
 # CLI reference
 
-Install `typespun-codegen` as a development dependency. Its executable is
-`typespun`. The package has no supported programmatic codegen API.
+Install `typespun-codegen` as a development dependency. Its direct executable is
+`typespun-codegen`. The package has no supported programmatic codegen API.
+
+If you installed `typespun` too, that runtime package provides the short alias
+`typespun` as a wrapper.
 
 ```text
-typespun <command> [options]
+typespun-codegen <command> [options]
 ```
 
-`typespun`, `typespun --help`, and command-level `--help` print help and exit
+`typespun-codegen`, `typespun-codegen --help`, and command-level `--help` print help and exit
 `0`. Unknown commands/options and missing or duplicate option values exit `2`.
 
-## `typespun init`
+## `typespun-codegen init`
 
 ```text
-typespun init [--style interface|class] [--input <path>]
+typespun-codegen init [--style interface|class] [--input <path>]
               [--output <path>] [--env-prefix <prefix>]
 ```
 
@@ -39,7 +42,7 @@ as Typespun-generated. It also rejects symlinked `package.json` and
 option.
 
 ```sh
-typespun init --style class --env-prefix APP
+typespun-codegen init --style class --env-prefix APP
 ```
 
 Typical output:
@@ -56,10 +59,10 @@ Exit `0` means initialization completed or stopped safely for dependency
 installation. Schema/generation diagnostics exit `1`; unusable project setup or
 conflicting options exit `2`.
 
-## `typespun generate`
+## `typespun-codegen generate`
 
 ```text
-typespun generate [--config <path>]
+typespun-codegen generate [--config <path>]
 ```
 
 Reads `typespun.json` (or the explicit path), the resolved schema and
@@ -74,10 +77,10 @@ Unchanged src/generated/typespun.ts.
 Warnings go to stderr. Success exits `0`, schema/default/output diagnostics
 exit `1`, and unusable TypeScript/project configuration exits `2`.
 
-## `typespun check`
+## `typespun-codegen check`
 
 ```text
-typespun check [--config <path>]
+typespun-codegen check [--config <path>]
 ```
 
 Reads the same files as `generate` and compares the expected bytes with the
