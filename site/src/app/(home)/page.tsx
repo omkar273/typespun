@@ -253,9 +253,15 @@ pnpm add --save-dev typespun-codegen`}
         </p>
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <div className="min-w-0">
+            <p className="mb-2 text-sm font-medium text-fd-muted-foreground">
+              Pass a bad value
+            </p>
             <DynamicCodeBlock lang="ts" code={FAILURE_INPUT} />
           </div>
           <div className="min-w-0">
+            <p className="mb-2 text-sm font-medium text-fd-muted-foreground">
+              Get this, before anything runs
+            </p>
             <DynamicCodeBlock lang="text" code={FAILURE_OUTPUT} />
           </div>
         </div>
@@ -279,13 +285,13 @@ pnpm add --save-dev typespun-codegen`}
             {PRECEDENCE.map((item) => (
               <li
                 key={item.n}
-                className="flex flex-col gap-1 bg-fd-background px-4 py-3.5 sm:flex-row sm:items-baseline sm:gap-4 sm:px-5"
+                className="grid gap-x-4 gap-y-1 bg-fd-background px-4 py-3.5 sm:grid-cols-[1.5rem_11rem_1fr] sm:items-baseline sm:px-5"
               >
                 <span className="font-mono text-xs text-brand-accent dark:text-brand-accent-bright">
                   {item.n}
                 </span>
                 <span className="font-display font-medium">{item.label}</span>
-                <span className="text-sm text-fd-muted-foreground sm:ml-auto sm:text-right">
+                <span className="text-sm text-fd-muted-foreground">
                   {item.note}
                 </span>
               </li>
