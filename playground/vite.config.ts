@@ -5,7 +5,13 @@ import { defineConfig } from 'vite';
 const here = (relativePath: string) =>
   fileURLToPath(new URL(relativePath, import.meta.url));
 
+// A GitHub Pages *project* site is served from /<repo>/, not the domain root,
+// so asset URLs need that prefix. Kept configurable rather than hardcoded so
+// local dev stays at / and a future custom domain can drop the prefix again.
+const base = process.env.PLAYGROUND_BASE ?? '/';
+
 export default defineConfig({
+  base,
   plugins: [react()],
   resolve: {
     // `typespun` and `typespun-codegen` are `file:` dependencies that resolve

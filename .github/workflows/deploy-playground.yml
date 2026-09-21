@@ -1,0 +1,65 @@
+name: deploy-playground
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'playground/**'
+      - 'packages/**'
+      - '.github/workflows/deploy-playground.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      # The playground resolves typespun and typespun-codegen through Vite
+      # aliases pointing at packages/*/dist, so the workspace must be built
+      # before the playground bundle is produced.
+      - name: Build packages
+        run: bun run build
+
+      - name: Install playground dependencies
+        run: bun install --cwd playground
+
+      # A project Pages site is served from /<repo>/, not the domain root.
+      # Drop this when a custom domain serves the playground at its root.
+      - name: Build playground
+        env:
+          PLAYGROUND_BASE: /typespun/
+        run: bun run --cwd playground build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: playground/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
