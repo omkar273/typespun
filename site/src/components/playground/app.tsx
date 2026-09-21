@@ -38,7 +38,7 @@ const COMPILE_DEBOUNCE_MS = 300;
 
 export default function Playground() {
   const theme = useSiteTheme();
-  const [tab, setTab] = useState<Tab>('loader');
+  const [tab, setTab] = useState<Tab>('run');
 
   const [source, setSource] = useState(SAMPLE_SOURCE);
   const [envPrefix, setEnvPrefix] = useState(DEFAULT_ENV_PREFIX);
