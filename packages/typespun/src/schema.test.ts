@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { validateTypedValue } from './generated.js';
 import type { FieldKind } from './generated.js';
 

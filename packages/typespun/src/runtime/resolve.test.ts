@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { rmSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -72,6 +72,25 @@ const schema = {
 } as const satisfies GeneratedSchema;
 
 const load = createLoader<RuntimeConfig>(schema);
+
+// This schema uses generic names that can legitimately exist in a real
+// environment, and the runtime reads process.env whenever no explicit source is
+// given. Isolate them so ambient state cannot decide these assertions.
+const schemaEnvNames = ['PORT', 'ENABLED', 'MODE', 'ORIGINS', 'TOKEN'] as const;
+let ambientSchemaEnvironment: Record<string, string | undefined> = {};
+
+beforeEach(() => {
+  ambientSchemaEnvironment = Object.fromEntries(
+    schemaEnvNames.map((name) => [name, process.env[name]]),
+  );
+  for (const name of schemaEnvNames) delete process.env[name];
+});
+
+afterEach(() => {
+  for (const name of schemaEnvNames) {
+    restoreEnvironment(name, ambientSchemaEnvironment[name]);
+  }
+});
 
 describe('createLoader', () => {
   test('does not coerce a lower-precedence value before selecting overrides', async () => {

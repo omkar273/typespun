@@ -62,10 +62,10 @@
 - Run focused tests while iterating, for example:
 
   ```sh
-  bun test packages/codegen/src/cli/cli.test.ts
-  bun test packages/codegen/src/analyzer/analyze.test.ts
-  bun test packages/codegen/src/emitter/emit.test.ts
-  bun test packages/codegen/src/project/project.test.ts
+  bunx vitest run packages/codegen/src/cli/cli.test.ts
+  bunx vitest run packages/codegen/src/analyzer/analyze.test.ts
+  bunx vitest run packages/codegen/src/emitter/emit.test.ts
+  bunx vitest run packages/codegen/src/project/project.test.ts
   ```
 
 - For CLI, packaging, exports, or dependency changes, build and exercise packed

@@ -43,8 +43,8 @@
 
 ## Development workflow
 
-- Use Bun for installs, builds, scripts, and tests.
-- Run focused runtime tests with `bun test packages/typespun/src`.
+- Use Bun for installs, builds, and scripts; tests run on Vitest.
+- Run focused runtime tests with `bunx vitest run packages/typespun/src`.
 - Run `bun run --filter typespun typecheck` and
   `bun run --filter typespun build` for package-local validation.
 - When public exports, packaging, or the generated ABI changes, also run

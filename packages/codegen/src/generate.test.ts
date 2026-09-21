@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'vitest';
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -10,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import {
   atomicWrite,
@@ -92,7 +94,7 @@ describe('project generation', () => {
     const first = await generateProject({ projectDirectory, mode: 'write' });
     const firstContents = readFileSync(outputPath, 'utf8');
     const firstMtime = statSync(outputPath).mtimeMs;
-    await Bun.sleep(20);
+    await sleep(20);
     const second = await generateProject({ projectDirectory, mode: 'write' });
 
     expect(first.status).toBe('written');
@@ -141,9 +143,7 @@ describe('project generation', () => {
     expect(result.status).toBe('unchanged');
     expect(result.diagnostics.map(({ code }) => code)).toContain('root_count');
     expect(readFileSync(outputPath, 'utf8')).toBe('// prior output\n');
-    expect(
-      Array.from(new Bun.Glob('.typespun.*.tmp').scanSync(dirname(outputPath))),
-    ).toEqual([]);
+    expect(temporaryArtifacts(dirname(outputPath))).toEqual([]);
   });
 
   test('defaults errors preserve output and secret diagnostics never include values', async () => {
@@ -245,9 +245,7 @@ export interface AppConfig {
     await atomicWrite(outputPath, 'generated contents');
 
     expect(readFileSync(outputPath, 'utf8')).toBe('generated contents');
-    expect(
-      Array.from(new Bun.Glob('.typespun.*.tmp').scanSync(projectDirectory)),
-    ).toEqual([]);
+    expect(temporaryArtifacts(projectDirectory)).toEqual([]);
   });
 
   test('keeps fingerprints stable for one explicit config across invocation directories', async () => {
@@ -284,3 +282,10 @@ export interface AppConfig {
     expect(readFileSync(outputPath, 'utf8')).toBe(firstOutput);
   });
 });
+
+/** Sibling temp files the atomic write must never leave behind. */
+function temporaryArtifacts(directory: string): string[] {
+  return readdirSync(directory).filter(
+    (entry) => entry.startsWith('.typespun.') && entry.endsWith('.tmp'),
+  );
+}

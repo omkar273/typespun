@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { Config, Default, Env, Ignore, Key, Secret } from './annotations.js';
 
 describe('inert annotations', () => {
