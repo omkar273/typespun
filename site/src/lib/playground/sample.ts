@@ -3,16 +3,8 @@ import type { FieldIR } from './engine';
 export const DEFAULT_ENV_PREFIX = 'APP';
 
 export const SAMPLE_SOURCE = `/**
- * One interface in, one typed loader out.
- *
- * Mark the root with the typespun tag below, then annotate leaves with JSDoc:
- *
- *   env NAME    override the generated variable name
- *   default     inline JSON fallback, the lowest precedence source
- *   secret      never echo this value back in an error
- *   ignore      leave the property out of the schema entirely
- *
- * Edit anything here; the tabs on the right re-run as you type.
+ * Edit this interface. The tabs on the right re-run as you type.
+ * Leaf tags: env, default, secret and ignore (see the examples below).
  *
  * @typespun
  */
