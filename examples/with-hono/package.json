@@ -1,0 +1,20 @@
+{
+  "name": "typespun-example-with-hono",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "config:check": "bun ../../packages/codegen/dist/bin.js check",
+    "config:generate": "bun ../../packages/codegen/dist/bin.js generate",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "hono": "4.13.8",
+    "typespun": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "typespun-codegen": "workspace:*"
+  }
+}

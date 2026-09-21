@@ -1,0 +1,9 @@
+{
+  "input": "src/config.ts",
+  "output": "src/generated/typespun.ts",
+  "envPrefix": "APP",
+  "defaults": {
+    "path": "config/config.yaml",
+    "unknownKeys": "error"
+  }
+}

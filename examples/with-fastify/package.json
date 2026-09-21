@@ -1,0 +1,22 @@
+{
+  "name": "typespun-example-with-fastify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "config:check": "bun ../../packages/codegen/dist/bin.js check",
+    "config:generate": "bun ../../packages/codegen/dist/bin.js generate",
+    "start": "node src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.0",
+    "fastify": "5.12.5",
+    "typespun": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "typescript": "6.0.3",
+    "typespun-codegen": "workspace:*"
+  }
+}

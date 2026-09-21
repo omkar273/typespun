@@ -1,0 +1,9 @@
+server:
+  host: 127.0.0.1
+  port: 8787
+logLevel: info
+cors:
+  origins:
+    - http://localhost:5173
+  allowCredentials: false
+databaseUrl: postgres://localhost:5432/typespun_example
