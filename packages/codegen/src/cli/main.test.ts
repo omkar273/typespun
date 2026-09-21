@@ -38,6 +38,23 @@ async function invoke(
 }
 
 describe('runCli usage', () => {
+  test.each(['-v', '--version'])(
+    'prints the package version for %s',
+    async (flag) => {
+      const result = await invoke(process.cwd(), [flag]);
+      const manifest = JSON.parse(
+        await readFile(
+          join(import.meta.dirname, '..', '..', 'package.json'),
+          'utf8',
+        ),
+      ) as { version: string };
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe(`${manifest.version}\n`);
+      expect(result.stderr).toBe('');
+    },
+  );
+
   test.each([
     [[]],
     [['--help']],
