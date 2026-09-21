@@ -114,47 +114,46 @@ export default function HomePage() {
           className="ts-grid pointer-events-none absolute inset-0 opacity-50"
         />
         <div className="relative mx-auto w-full max-w-5xl px-4 pt-16 pb-14 sm:pt-24 sm:pb-20">
-          <Eyebrow>Typed configuration for TypeScript</Eyebrow>
+          <Eyebrow>For TypeScript services on Bun and Node.js</Eyebrow>
           <h1 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.08] sm:text-5xl lg:text-6xl">
-            Declare configuration once.
+            Your config, typed and validated.
             <br />
             <span className="text-brand-accent dark:text-brand-accent-bright">
-              Generate the validated loader.
+              From one TypeScript interface.
             </span>
           </h1>
           <p className="mt-6 max-w-2xl text-base text-fd-muted-foreground sm:text-lg">
-            A configuration field is usually described three times — as a
-            TypeScript type, as <code>process.env</code> parsing, and as a
-            runtime schema. Typespun makes one TypeScript declaration the
-            build-time source of truth and emits a deterministic, committable
-            loader that resolves five source layers in a fixed order and
-            validates every field at startup.
+            Stop describing every setting three times: a type, some{' '}
+            <code>process.env</code> parsing, and a runtime schema. Write one
+            interface. Typespun generates the loader that reads your env vars
+            and files, checks every field at startup, and fails with one clear
+            error.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
-              href="/docs"
+              href="/playground"
               className="rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
             >
-              Get started
+              Try it in 60 seconds
             </Link>
             <Link
-              href="/playground"
+              href="/docs"
               className="rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
             >
-              Playground
+              Read the docs
             </Link>
             <Link
               href="/compare"
               className="px-1 py-2.5 text-sm font-medium underline underline-offset-4 decoration-fd-border hover:decoration-current"
             >
-              How it compares to t3-env, envalid and Zod
+              Compared with t3-env, envalid and Zod
             </Link>
           </div>
 
           <div className="mt-10 w-full min-w-0 max-w-xl">
             <p className="mb-2 text-sm text-fd-muted-foreground">
-              Two packages: the runtime, and the generator as a dev dependency.
+              Free and MIT-licensed. Two packages: the runtime, and the generator as a dev dependency.
             </p>
             <Install
               bun={`bun add typespun
