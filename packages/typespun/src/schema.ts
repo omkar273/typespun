@@ -109,3 +109,54 @@ function isArrayElement(
 
   return typeof value === element;
 }
+
+/**
+ * Renders a {@link ConfigError} as indented, human-readable lines suitable for
+ * stderr. Every integration otherwise rewrites the same loop over `issues`.
+ *
+ * Secret-safe by construction rather than by care: the resolver already omits
+ * `received` and replaces the message for fields marked secret, so there is
+ * nothing here to redact. This formats what it is given.
+ *
+ * The returned string has no trailing newline, so the caller chooses.
+ *
+ * ```ts
+ * try {
+ *   loadConfig();
+ * } catch (error) {
+ *   if (error instanceof ConfigError) {
+ *     console.error(formatConfigError(error));
+ *     process.exit(1);
+ *   }
+ *   throw error;
+ * }
+ * ```
+ */
+export function formatConfigError(
+  error: ConfigError,
+  options: { readonly heading?: string } = {},
+): string {
+  const heading = options.heading ?? 'Configuration validation failed';
+  const lines: string[] = [heading];
+
+  for (const issue of error.issues) {
+    const where = issue.envKey === undefined ? '' : ` (${issue.envKey})`;
+    lines.push(`  ${issue.path}${where}: ${issue.message}`);
+    if (issue.received !== undefined) {
+      lines.push(`    received: ${formatReceived(issue.received)}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function formatReceived(value: unknown): string {
+  // JSON.stringify returns undefined for functions and symbols, and throws on
+  // cyclic input. Neither should reach here, but a formatter that throws while
+  // reporting an error is the worst possible failure mode.
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}

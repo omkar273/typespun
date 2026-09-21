@@ -1,4 +1,4 @@
-import { ConfigError } from 'typespun';
+import { ConfigError, formatConfigError } from 'typespun';
 import { type Config, loadConfig } from './generated/typespun.ts';
 
 /**
@@ -13,14 +13,11 @@ export function loadAppConfig(): Config {
     });
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
-    console.error('Configuration is invalid. The server did not start.');
-    for (const issue of error.issues) {
-      const where = issue.envKey === undefined ? '' : ` (${issue.envKey})`;
-      console.error(`  ${issue.path}${where}: ${issue.message}`);
-      if (issue.received !== undefined) {
-        console.error(`    received: ${JSON.stringify(issue.received)}`);
-      }
-    }
+    console.error(
+      formatConfigError(error, {
+        heading: 'Configuration is invalid. The server did not start.',
+      }),
+    );
     process.exit(1);
   }
 }
