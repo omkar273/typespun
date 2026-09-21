@@ -51,6 +51,11 @@ const config = loadConfig({
   overrides: { server: { port: 4000 } },
 });`;
 
+const FAILURE_INPUT = `loadConfig({ source: { APP_PORT: 'not-a-number' } });`;
+
+const FAILURE_OUTPUT = `Configuration validation failed
+invalid_value port (APP_PORT): Expected a finite number`;
+
 const PRECEDENCE = [
   { n: '1', label: 'typed overrides', note: 'passed to loadConfig()' },
   {
@@ -205,6 +210,27 @@ pnpm add --save-dev typespun-codegen`}
               </p>
               <DynamicCodeBlock lang="ts" code={AFTER_USAGE} />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* -------------------------------------------------------------- Failure */}
+      <section className="mx-auto w-full max-w-5xl px-4 pb-14 sm:pb-20">
+        <Eyebrow>When something is wrong</Eyebrow>
+        <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">
+          You find out at startup, not in production
+        </h2>
+        <p className="mt-3 max-w-2xl text-fd-muted-foreground">
+          Every field is checked before your app starts. A bad value stops the
+          process with the field path and the environment key it came from, and
+          when several fields fail, you see all of them at once.
+        </p>
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="min-w-0">
+            <DynamicCodeBlock lang="ts" code={FAILURE_INPUT} />
+          </div>
+          <div className="min-w-0">
+            <DynamicCodeBlock lang="text" code={FAILURE_OUTPUT} />
           </div>
         </div>
       </section>
