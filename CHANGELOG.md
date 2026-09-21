@@ -9,6 +9,16 @@ generated-module ABI is versioned separately by `GeneratedSchema.protocolVersion
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-22
+
+### Fixed
+
+- The npm package pages. `0.1.3` published from a tree that predated the
+  README updates, so the registry documented `formatConfigError` and the
+  `typespun/schema` subpath nowhere and still claimed Node.js 22 or 24. The
+  only way to correct an npm package page is to publish again; no code
+  changed between `0.1.3` and `0.1.4`.
+
 ## [0.1.3] - 2026-09-22
 
 ### Added
@@ -98,7 +108,8 @@ First publish with a usable `dist` for both packages: schema analysis, the
 runtime resolver with fixed source precedence, aggregated `ConfigError`
 diagnostics, and secret-aware redaction.
 
-[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/omkar273/typespun/releases/tag/v0.1.4
 [0.1.3]: https://github.com/omkar273/typespun/releases/tag/v0.1.3
 [0.1.2]: https://github.com/omkar273/typespun/releases/tag/v0.1.2
 [0.0.9]: https://github.com/omkar273/typespun/releases/tag/v0.0.9
