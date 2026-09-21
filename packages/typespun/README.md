@@ -11,7 +11,7 @@ for TypeScript. Schema analysis and the CLI are shipped separately in
 [![npm](https://img.shields.io/npm/v/typespun.svg)](https://www.npmjs.com/package/typespun)
 [![license](https://img.shields.io/npm/l/typespun.svg)](LICENSE)
 
-**[Try it in the browser](https://omkar273.github.io/typespun/)** — edit an
+**[Try it in the browser](https://typespun.vercel.app/playground)** — edit an
 interface and watch the generated loader, the resolved schema, and a live
 `loadConfig()` run update as you type.
 

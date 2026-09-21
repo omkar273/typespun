@@ -12,7 +12,7 @@ const withMDX = createMDX();
  *      them, so depending on them that way would freeze whatever `dist`
  *      happened to exist at install time. Aliasing straight at the build
  *      output keeps `bun run build` at the repo root as the single source of
- *      truth — exactly what `playground/vite.config.ts` does.
+ *      truth.
  *   2. `typespun/generated` is bundled by tsup with its dotenv reader inlined.
  *      That branch is unreachable here (`loadConfig` is always called with an
  *      explicit `source` and never with `envFiles`) but the static imports

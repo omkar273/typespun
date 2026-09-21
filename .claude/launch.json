@@ -2,18 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "playground",
+      "name": "site",
       "runtimeExecutable": "bun",
-      "runtimeArgs": [
-        "run",
-        "--cwd",
-        "playground",
-        "dev",
-        "--port",
-        "5178",
-        "--strictPort"
-      ],
-      "port": 5178
+      "runtimeArgs": ["run", "--cwd", "site", "dev", "--port", "3117"],
+      "port": 3117
     }
   ]
 }

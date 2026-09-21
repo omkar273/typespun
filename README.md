@@ -15,6 +15,10 @@
 
 ![Typespun — typed configuration for TypeScript, from one interface](docs/assets/typespun-social-card.png)
 
+**[Documentation](https://typespun.vercel.app)** ·
+**[Try it in the browser](https://typespun.vercel.app/playground)** ·
+**[Compare to alternatives](https://typespun.vercel.app/compare)**
+
 Stop describing every setting three times: a TypeScript type, `process.env`
 parsing, and a runtime schema. The three drift. Write one interface instead, and
 Typespun generates a deterministic, committable loader that reads your env vars,
@@ -131,6 +135,10 @@ fail generation rather than degrading silently. See
 [annotation reference](docs/api/decorators-and-annotations.md).
 
 ## Documentation
+
+Full documentation, an interactive playground and an honest comparison against
+t3-env, envalid and plain Zod live at
+[typespun.vercel.app](https://typespun.vercel.app).
 
 - [Getting started](docs/getting-started.md)
 - [Generated code](docs/concepts/generated-code.md) · [Validation and redaction](docs/concepts/validation-and-redaction.md)

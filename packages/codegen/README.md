@@ -21,7 +21,7 @@ tooling such as the playground, but that surface is experimental, outside
 semantic versioning while the package is on 0.x, and may change in any
 release.
 
-**[Try it in the browser](https://omkar273.github.io/typespun/)** — the
+**[Try it in the browser](https://typespun.vercel.app/playground)** — the
 playground runs this analyzer and emitter client-side, so you can see the
 generated loader for any declaration without installing anything.
 
