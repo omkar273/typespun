@@ -1,7 +1,7 @@
 {
   "name": "typespun-codegen",
   "version": "0.0.8",
-  "description": "TypeScript schema analyzer, generator, and CLI for Typespun",
+  "description": "Generate a type-safe config loader from one TypeScript interface. Schema analyzer and CLI for environment variables, dotenv, and YAML defaults.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -13,12 +13,21 @@
   "bugs": "https://github.com/omkar273/typespun/issues",
   "keywords": [
     "code-generation",
+    "codegen",
     "configuration",
+    "config",
+    "typed-config",
+    "type-safe",
+    "environment-variables",
+    "env",
+    "dotenv",
+    "cli",
     "typescript",
-    "typed-config"
+    "nodejs",
+    "bun"
   ],
   "engines": {
-    "node": ">=22 <23 || >=24 <25",
+    "node": ">=22",
     "bun": ">=1.4.1"
   },
   "sideEffects": false,

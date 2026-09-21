@@ -1,7 +1,7 @@
 {
   "name": "typespun",
   "version": "0.0.8",
-  "description": "Typed, generated configuration loading for TypeScript",
+  "description": "Type-safe configuration for TypeScript: the runtime behind generated loaders that validate environment variables, dotenv, and defaults.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -13,12 +13,21 @@
   "bugs": "https://github.com/omkar273/typespun/issues",
   "keywords": [
     "configuration",
+    "config",
+    "typed-config",
+    "type-safe",
     "environment",
+    "environment-variables",
+    "env",
+    "dotenv",
+    "validation",
     "typescript",
-    "typed-config"
+    "nodejs",
+    "bun",
+    "12-factor"
   ],
   "engines": {
-    "node": ">=22 <23 || >=24 <25",
+    "node": ">=22",
     "bun": ">=1.4.1"
   },
   "sideEffects": false,

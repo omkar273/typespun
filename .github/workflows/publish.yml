@@ -29,6 +29,10 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance attestations.
+      id-token: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
@@ -158,8 +162,8 @@ jobs:
         if: steps.release.outputs.should_publish == 'true'
         run: |
           npm whoami
-          npm publish .release/typespun.tgz --access public --tag "${{ steps.tag.outputs.tag }}"
+          npm publish .release/typespun.tgz --access public --provenance --tag "${{ steps.tag.outputs.tag }}"
 
       - name: Publish typespun-codegen
         if: steps.release.outputs.should_publish == 'true'
-        run: npm publish .release/typespun-codegen.tgz --access public --tag "${{ steps.tag.outputs.tag }}"
+        run: npm publish .release/typespun-codegen.tgz --access public --provenance --tag "${{ steps.tag.outputs.tag }}"
