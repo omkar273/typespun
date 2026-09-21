@@ -9,9 +9,9 @@
 [![npm: typespun](https://img.shields.io/npm/v/typespun.svg?label=typespun)](https://www.npmjs.com/package/typespun)
 [![npm downloads](https://img.shields.io/npm/dm/typespun.svg?label=downloads)](https://www.npmjs.com/package/typespun)
 [![CI](https://github.com/omkar273/typespun/actions/workflows/ci.yml/badge.svg)](https://github.com/omkar273/typespun/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-132238.svg)](LICENSE)
-[![Node.js: 22+](https://img.shields.io/badge/Node.js-%E2%89%A5%2022-2D8C91.svg)](package.json)
-[![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-4D6FBF.svg)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-1C1917.svg)](LICENSE)
+[![Node.js: 22+](https://img.shields.io/badge/Node.js-%E2%89%A5%2022-B45309.svg)](package.json)
+[![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-D97706.svg)](package.json)
 
 ![Typespun — declare configuration once, then generate the loader](docs/assets/typespun-social-card.png)
 

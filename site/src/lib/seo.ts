@@ -19,7 +19,7 @@ const socialCard = {
   url: `${siteUrl}/typespun-social-card.png`,
   width: 1200,
   height: 630,
-  alt: 'Typespun — declare configuration once. Generate the loader.',
+  alt: 'Typespun — typed configuration for TypeScript, from one interface.',
 };
 
 /**
