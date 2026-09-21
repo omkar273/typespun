@@ -9,6 +9,8 @@ generated-module ABI is versioned separately by `GeneratedSchema.protocolVersion
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-22
+
 ### Added
 
 - `formatConfigError(error, { heading? })`, exported from `typespun`, renders a
@@ -96,7 +98,8 @@ First publish with a usable `dist` for both packages: schema analysis, the
 runtime resolver with fixed source precedence, aggregated `ConfigError`
 diagnostics, and secret-aware redaction.
 
-[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/omkar273/typespun/releases/tag/v0.1.3
 [0.1.2]: https://github.com/omkar273/typespun/releases/tag/v0.1.2
 [0.0.9]: https://github.com/omkar273/typespun/releases/tag/v0.0.9
 [0.0.8]: https://github.com/omkar273/typespun/releases/tag/v0.0.8

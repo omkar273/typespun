@@ -1,6 +1,6 @@
 {
   "name": "typespun-codegen",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Generate a type-safe config loader from one TypeScript interface. Schema analyzer and CLI for environment variables, dotenv, and YAML defaults.",
   "license": "MIT",
   "type": "module",
