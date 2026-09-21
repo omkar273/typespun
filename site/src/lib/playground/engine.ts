@@ -22,6 +22,7 @@
 
 import type { Diagnostic, FieldIR } from 'typespun-codegen';
 import type { ConfigIssue, GeneratedSchema } from 'typespun/schema';
+import codegenPackage from '../../../../packages/codegen/package.json';
 
 export type { ConfigIssue, Diagnostic, FieldIR, GeneratedSchema };
 
@@ -223,10 +224,10 @@ function toCompilerMessage(
 
 /**
  * Version stamped into the fingerprint. The real CLI reads it from the
- * package; the playground has no package.json at runtime, so it is pinned and
- * shown in the UI next to the fingerprint.
+ * package at run time; the playground bundles the same package.json value at
+ * build time, so its fingerprints match the CLI's for the same release.
  */
-export const GENERATOR_VERSION = '0.1.2';
+export const GENERATOR_VERSION: string = codegenPackage.version;
 
 const DEFAULT_LIB = '/lib.es2022.d.ts';
 const LIB_CDN = 'https://cdn.jsdelivr.net/npm/typescript';
