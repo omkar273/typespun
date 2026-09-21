@@ -5,6 +5,7 @@ import { Install } from '@/components/install';
 import { JsonLd } from '@/components/json-ld';
 import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
 import { links } from '@/lib/shared';
+import runtimePackage from '../../../../packages/typespun/package.json';
 
 export function generateMetadata(): Metadata {
   return pageMetadata({
@@ -90,6 +91,13 @@ const PRECEDENCE = [
   },
 ];
 
+const FACTS = [
+  { value: `v${runtimePackage.version}`, label: 'latest release' },
+  { value: 'MIT', label: 'licensed, free' },
+  { value: '2', label: 'packages, one workspace' },
+  { value: 'Bun + Node 22/24/26', label: 'tested in CI' },
+];
+
 const PROOF = [
   {
     title: 'Source on GitHub',
@@ -103,7 +111,7 @@ const PROOF = [
   },
   {
     title: 'Runnable examples',
-    note: 'An interface project and a class project, generated and checked by CI — not snippets.',
+    note: 'Interface and class projects, plus Fastify and Hono apps. Real workspaces you can run, not snippets.',
     href: links.examples,
   },
   {
@@ -286,7 +294,7 @@ pnpm add --save-dev typespun-codegen`}
 
           <Link
             href="/docs/concepts/precedence"
-            className="mt-6 inline-block text-sm font-medium underline underline-offset-4"
+            className="mt-4 inline-flex min-h-10 items-center text-sm font-medium underline underline-offset-4"
           >
             Read how precedence resolves, per leaf
           </Link>
@@ -352,6 +360,18 @@ pnpm add --save-dev typespun-codegen`}
             logos here. Everything below is something you can read and run
             yourself.
           </p>
+          <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {FACTS.map((fact) => (
+              <div key={fact.label} className="flex flex-col-reverse">
+                <dt className="mt-0.5 text-xs text-fd-muted-foreground">
+                  {fact.label}
+                </dt>
+                <dd className="font-display text-xl font-semibold text-brand-accent dark:text-brand-accent-bright">
+                  {fact.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
           <div className="mt-8 grid gap-px overflow-hidden rounded-xl border border-fd-border bg-fd-border sm:grid-cols-2">
             {PROOF.map((item) => (
               <a
@@ -382,7 +402,7 @@ pnpm add --save-dev typespun-codegen`}
               Not sure it fits?{' '}
               <Link
                 href="/compare"
-                className="underline underline-offset-4 decoration-fd-border hover:decoration-current"
+                className="inline-flex min-h-8 items-center underline underline-offset-4 decoration-fd-border hover:decoration-current"
               >
                 The comparison page says plainly where Typespun loses.
               </Link>
