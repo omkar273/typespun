@@ -8,6 +8,8 @@
     "coverage",
     "node_modules",
     "packages/*/dist",
-    "examples/*/src/generated/**"
+    "examples/*/src/generated/**",
+    "playground",
+    "site"
   ]
 }

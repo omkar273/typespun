@@ -37,7 +37,7 @@
     },
     "packages/codegen": {
       "name": "typespun-codegen",
-      "version": "0.0.8",
+      "version": "0.1.2",
       "bin": {
         "typespun": "./dist/bin.js",
       },
@@ -49,7 +49,7 @@
     },
     "packages/typespun": {
       "name": "typespun",
-      "version": "0.0.8",
+      "version": "0.1.2",
       "dependencies": {
         "dotenv": "17.4.2",
       },

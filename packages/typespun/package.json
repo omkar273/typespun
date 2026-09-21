@@ -1,6 +1,6 @@
 {
   "name": "typespun",
-  "version": "0.0.8",
+  "version": "0.1.2",
   "description": "Type-safe configuration for TypeScript: the runtime behind generated loaders that validate environment variables, dotenv, and defaults.",
   "license": "MIT",
   "type": "module",
