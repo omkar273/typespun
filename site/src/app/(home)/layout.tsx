@@ -27,6 +27,12 @@ function Footer() {
           <a href={links.repo} className="hover:text-fd-foreground">
             GitHub
           </a>
+          <a href={links.changelog} className="hover:text-fd-foreground">
+            Changelog
+          </a>
+          <a href={`${links.repo}/issues`} className="hover:text-fd-foreground">
+            Issues
+          </a>
           <a href={links.npmRuntime} className="hover:text-fd-foreground">
             npm: typespun
           </a>

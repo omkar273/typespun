@@ -26,6 +26,7 @@ export interface AppConfig {
 const config: AppConfig = {
   server: {
     host: process.env.APP_SERVER_HOST ?? '127.0.0.1',
+    // Number('oops') is NaN. Nothing notices.
     port: Number(process.env.APP_SERVER_PORT ?? 3000),
   },
   origins: JSON.parse(process.env.APP_ORIGINS ?? '[]'),
@@ -191,6 +192,15 @@ pnpm add --save-dev typespun-codegen`}
                 >
                   Changelog
                 </a>
+              </p>
+              <p className="mt-2 text-sm text-fd-muted-foreground">
+                Coming from Zod, t3-env or envalid?{' '}
+                <Link
+                  href="/compare"
+                  className="font-medium text-fd-foreground underline underline-offset-4 decoration-fd-border hover:decoration-current"
+                >
+                  See how it compares
+                </Link>
               </p>
             </div>
           </div>
