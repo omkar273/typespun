@@ -62,7 +62,7 @@ describe('published package contents', () => {
     expect(runtimeDependencies).not.toHaveProperty('yaml');
     expect(runtimeDependencies).not.toHaveProperty('typespun-codegen');
     expect(runtimeEngines).toEqual({
-      node: '>=22 <23 || >=24 <25',
+      node: '>=22',
       bun: '>=1.4.1',
     });
     expect(codegenEngines).toEqual(runtimeEngines);
