@@ -9,6 +9,37 @@ generated-module ABI is versioned separately by `GeneratedSchema.protocolVersion
 
 ## [Unreleased]
 
+### Added
+
+- `formatConfigError(error, { heading? })`, exported from `typespun`, renders a
+  `ConfigError` as indented lines for stderr. Building real Hono and Fastify
+  servers against the package produced the same hand-written loop over `issues`
+  in both, so it belongs in the package. It is secret-safe by construction: the
+  resolver already drops `received` and replaces the message for fields marked
+  secret, so there is nothing left for the formatter to redact.
+- A `typespun/schema` subpath exporting the schema types and
+  `validateTypedValue`. The analyzer previously imported that one pure function
+  from `typespun/generated`, which also carries the runtime resolver and its
+  inlined dotenv reader, so any browser bundle of the code generator pulled in
+  `fs` and `dotenv` to get a switch statement. `typespun/generated` still
+  re-exports `validateTypedValue`, so the generated-module ABI is unchanged.
+- `typespun.json` accepts and ignores a `$schema` key, so the file can carry
+  editor completion the way `tsconfig.json` does.
+
+### Changed
+
+- Environment values for array fields report the accepted form:
+  `Expected a JSON array of string, for example ["a","b"]` rather than
+  `Expected an array of string`. Comma-separated is what most people try first
+  in a 12-factor deployment and nothing pointed at the required syntax. Typed
+  overrides and compiled defaults are unaffected — their values are already
+  parsed, so their message stays JSON-agnostic.
+
+## [0.1.2] - 2026-09-21
+
+First release with corrected version ordering: `latest` now sorts above every
+published version.
+
 ### Changed
 
 - `engines.node` relaxed from `">=22 <23 || >=24 <25"` to `">=22"`. The previous
@@ -65,7 +96,8 @@ First publish with a usable `dist` for both packages: schema analysis, the
 runtime resolver with fixed source precedence, aggregated `ConfigError`
 diagnostics, and secret-aware redaction.
 
-[Unreleased]: https://github.com/omkar273/typespun/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/omkar273/typespun/releases/tag/v0.1.2
 [0.0.9]: https://github.com/omkar273/typespun/releases/tag/v0.0.9
 [0.0.8]: https://github.com/omkar273/typespun/releases/tag/v0.0.8
 [0.0.7]: https://github.com/omkar273/typespun/releases/tag/v0.0.7
