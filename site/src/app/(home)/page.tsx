@@ -4,6 +4,7 @@ import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { Install } from '@/components/install';
 import { JsonLd } from '@/components/json-ld';
 import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
+import { Mark } from '@/lib/layout.shared';
 import { links } from '@/lib/shared';
 
 export function generateMetadata(): Metadata {
@@ -118,65 +119,80 @@ export default function HomePage() {
           aria-hidden="true"
           className="ts-grid pointer-events-none absolute inset-0 opacity-50"
         />
-        <div className="relative mx-auto w-full max-w-5xl px-4 pt-16 pb-14 sm:pt-24 sm:pb-20">
-          <Eyebrow>For TypeScript services on Bun and Node.js</Eyebrow>
-          <h1 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.08] sm:text-5xl lg:text-6xl">
-            Your config, typed and validated.
-            <br />
-            <span className="text-brand-accent dark:text-brand-accent-bright">
-              From one TypeScript interface.
-            </span>
-          </h1>
-          <p className="mt-6 max-w-2xl text-base text-fd-muted-foreground sm:text-lg">
-            Stop describing every setting three times: a type, some{' '}
-            <code>process.env</code> parsing, and a runtime schema. Write one
-            interface. Typespun generates the loader that reads your env vars
-            and files, checks every field at startup, and fails with one clear
-            error.
-          </p>
+        <Mark
+          size={520}
+          strokeWidth={2.5}
+          className="pointer-events-none absolute -right-24 top-1/2 hidden -translate-y-1/2 text-fd-foreground opacity-[0.05] lg:block"
+        />
+        <div className="relative mx-auto grid w-full max-w-5xl items-center gap-12 px-4 pt-16 pb-14 sm:pt-24 sm:pb-20 lg:grid-cols-[1.1fr_1fr]">
+          <div className="min-w-0">
+            <Eyebrow>For TypeScript services on Bun and Node.js</Eyebrow>
+            <h1 className="mt-4 text-4xl font-semibold leading-[1.08] sm:text-5xl">
+              Your config, typed and validated.
+              <br />
+              <span className="text-brand-accent dark:text-brand-accent-bright">
+                From one TypeScript interface.
+              </span>
+            </h1>
+            <p className="mt-6 max-w-xl text-base text-fd-muted-foreground sm:text-lg">
+              Stop describing every setting three times: a type, some{' '}
+              <code>process.env</code> parsing, and a runtime schema. Write one
+              interface. Typespun generates the loader that reads your env vars
+              and files, checks every field at startup, and fails with one
+              clear error.
+            </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              href="/playground"
-              className="rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
-            >
-              Try it in 60 seconds
-            </Link>
-            <Link
-              href="/docs"
-              className="rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
-            >
-              Read the docs
-            </Link>
-            <Link
-              href="/compare"
-              className="px-1 py-2.5 text-sm font-medium underline underline-offset-4 decoration-fd-border hover:decoration-current"
-            >
-              Compared with t3-env, envalid and Zod
-            </Link>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/playground"
+                className="rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Try it in 60 seconds
+              </Link>
+              <Link
+                href="/docs"
+                className="rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
+              >
+                Read the docs
+              </Link>
+              <Link
+                href="/compare"
+                className="px-1 py-2.5 text-sm font-medium underline underline-offset-4 decoration-fd-border hover:decoration-current"
+              >
+                Compared with t3-env, envalid and Zod
+              </Link>
+            </div>
+
+            <div className="mt-8 w-full min-w-0 max-w-md">
+              <Install
+                bun={`bun add typespun
+bun add --dev typespun-codegen`}
+                npm={`npm install typespun
+npm install --save-dev typespun-codegen`}
+                pnpm={`pnpm add typespun
+pnpm add --save-dev typespun-codegen`}
+              />
+              <p className="mt-3 text-xs text-fd-muted-foreground">
+                Free and MIT-licensed. Runtime plus a dev-time generator. Bun
+                1.4.1+ or Node.js 22+.{' '}
+                <a
+                  href={links.changelog}
+                  className="underline underline-offset-2"
+                >
+                  Changelog
+                </a>
+              </p>
+            </div>
           </div>
 
-          <div className="mt-10 w-full min-w-0 max-w-xl">
+          <div className="min-w-0">
             <p className="mb-2 text-sm text-fd-muted-foreground">
-              Free and MIT-licensed. Two packages: the runtime, and the generator as a dev dependency.
+              This is the whole declaration:
             </p>
-            <Install
-              bun={`bun add typespun
-bun add --dev typespun-codegen`}
-              npm={`npm install typespun
-npm install --save-dev typespun-codegen`}
-              pnpm={`pnpm add typespun
-pnpm add --save-dev typespun-codegen`}
-            />
-            <p className="mt-3 text-xs text-fd-muted-foreground">
-              Bun 1.4.1 or newer, or Node.js 22 or newer.{' '}
-              <a
-                href={links.changelog}
-                className="underline underline-offset-2"
-              >
-                See the changelog
-              </a>{' '}
-              for current versions.
+            <DynamicCodeBlock lang="ts" code={AFTER_DECLARATION} />
+            <p className="mt-3 text-sm text-fd-muted-foreground">
+              <code>typespun generate</code> turns it into a committed,
+              validated <code>loadConfig()</code>.
             </p>
           </div>
         </div>
