@@ -2,8 +2,29 @@ import { createGetUrl } from 'fumadocs-core/source';
 
 export const appName = 'Typespun';
 
-/** Used for canonical URLs, OpenGraph and the sitemap. */
-export const siteUrl = 'https://typespun.dev';
+/**
+ * Used for canonical URLs, OpenGraph and the sitemap.
+ *
+ * Resolved from the environment rather than hardcoded, because pointing a
+ * canonical at a host that does not serve the page is worse than shipping no
+ * canonical at all. Precedence:
+ *
+ *   1. NEXT_PUBLIC_SITE_URL   an explicit custom domain, once one exists
+ *   2. VERCEL_PROJECT_PRODUCTION_URL  the stable production host on Vercel,
+ *      which stays put across deployments (VERCEL_URL is per-deployment and
+ *      would canonicalise every page at a throwaway host)
+ *   3. localhost, for local builds
+ */
+export const siteUrl = normalizeSiteUrl(
+  process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+    'http://localhost:3000',
+);
+
+function normalizeSiteUrl(value: string): string {
+  const withProtocol = /^https?:\/\//.test(value) ? value : `https://${value}`;
+  return withProtocol.replace(/\/+$/, '');
+}
 
 /** One line that carries the category. Never ship the brand name bare. */
 export const appTagline = 'typed configuration for TypeScript';

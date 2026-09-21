@@ -2,7 +2,7 @@
   "name": "typespun-site",
   "version": "0.0.0",
   "private": true,
-  "description": "Documentation website for Typespun — typed configuration for TypeScript.",
+  "description": "Documentation website for Typespun \u2014 typed configuration for TypeScript.",
   "type": "module",
   "packageManager": "bun@1.4.1",
   "scripts": {
@@ -12,11 +12,14 @@
     "types:check": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@typescript/vfs": "^1.6.0",
     "cn": "^0.3.0",
     "fumadocs-core": "16.15.12",
     "fumadocs-mdx": "15.4.3",
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.15.12",
     "lucide-react": "^1.47.0",
+    "monaco-editor": "^0.52.2",
     "next": "16.3.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

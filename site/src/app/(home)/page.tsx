@@ -96,7 +96,7 @@ const PROOF = [
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-teal dark:text-brand-teal-bright">
+    <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-accent dark:text-brand-accent-bright">
       {children}
     </p>
   );
@@ -118,7 +118,7 @@ export default function HomePage() {
           <h1 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.08] sm:text-5xl lg:text-6xl">
             Declare configuration once.
             <br />
-            <span className="text-brand-teal dark:text-brand-teal-bright">
+            <span className="text-brand-accent dark:text-brand-accent-bright">
               Generate the validated loader.
             </span>
           </h1>
@@ -195,7 +195,7 @@ pnpm add --save-dev typespun-codegen`}
           </div>
           <div className="min-w-0">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-fd-muted-foreground">
-              <span className="inline-block size-1.5 rounded-full bg-brand-teal dark:bg-brand-teal-bright" />
+              <span className="inline-block size-1.5 rounded-full bg-brand-accent dark:bg-brand-accent-bright" />
               With Typespun
             </h3>
             <div className="space-y-3">
@@ -230,7 +230,7 @@ pnpm add --save-dev typespun-codegen`}
                 key={item.n}
                 className="flex flex-col gap-1 bg-fd-background px-4 py-3.5 sm:flex-row sm:items-baseline sm:gap-4 sm:px-5"
               >
-                <span className="font-mono text-xs text-brand-teal dark:text-brand-teal-bright">
+                <span className="font-mono text-xs text-brand-accent dark:text-brand-accent-bright">
                   {item.n}
                 </span>
                 <span className="font-display font-medium">{item.label}</span>

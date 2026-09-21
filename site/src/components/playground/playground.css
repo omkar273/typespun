@@ -1,0 +1,1053 @@
+/*
+ * The playground's visual language, scoped under `.tsp`.
+ *
+ * It began life as a standalone Vite app with its own palette and its own
+ * bare element selectors (`body`, `*`, `html`). Both had to go: the colours
+ * now derive from the site's Fumadocs tokens so `/playground` reads as the
+ * same product as the docs, and every selector is nested under `.tsp` so
+ * nothing here can reach a docs page. The old `data-theme` attribute is gone
+ * too — the site's own `.dark` class on `<html>` drives both palettes.
+ */
+
+.tsp {
+  --bg: var(--color-fd-background);
+  --surface: var(--color-fd-card);
+  --surface-2: var(--color-fd-muted);
+  --surface-3: var(--color-fd-secondary);
+  --border: var(--color-fd-border);
+  --border-strong: #d6cec4;
+  --text: var(--color-fd-foreground);
+  --text-dim: #4b463d;
+  --muted: var(--color-fd-muted-foreground);
+  --accent: var(--color-fd-primary);
+  --accent-ink: var(--color-fd-primary-foreground);
+  --accent-soft: rgba(180, 83, 9, 0.12);
+  --danger: #b02525;
+  --danger-soft: rgba(176, 37, 37, 0.09);
+  --ok: #10703a;
+  --ok-soft: rgba(16, 112, 58, 0.09);
+  --secret: #6d28d9;
+  --secret-soft: rgba(109, 40, 217, 0.1);
+  --shadow: 0 14px 32px rgba(58, 48, 30, 0.08);
+  --radius: 12px;
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Only the semantic colours need a dark variant; the rest follow the site. */
+.dark .tsp {
+  --border-strong: #4a423e;
+  --text-dim: #d6d0c9;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --danger: #ff8b8b;
+  --danger-soft: rgba(255, 139, 139, 0.12);
+  --ok: #5ddc9a;
+  --ok-soft: rgba(93, 220, 154, 0.12);
+  --secret: #c9a6ff;
+  --secret-soft: rgba(201, 166, 255, 0.14);
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+
+.tsp button,
+.tsp input,
+.tsp select,
+.tsp textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Where the standalone app put its wordmark. The navbar above already carries
+   the brand, so this is a plain page heading. */
+.tsp .page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+.tsp .shell {
+  display: flex;
+  flex-direction: column;
+  /* The site navbar (h-14) sits above it; the workbench takes the rest. */
+  height: calc(100dvh - 3.5rem);
+  min-height: 34rem;
+}
+
+.tsp .topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 140%);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.tsp .topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent) 22%,
+    transparent 60%
+  );
+  opacity: 0.55;
+}
+
+.tsp .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tsp .brand-tag {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsp .topbar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.tsp .topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tsp .prefix-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.tsp .prefix-field label {
+  color: var(--muted);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tsp .prefix-field input {
+  width: 92px;
+  padding: 3px 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.tsp .prefix-field input:focus-visible {
+  border-color: var(--accent);
+}
+
+/* --------------------------------------------------------------- button -- */
+.tsp .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+  white-space: nowrap;
+}
+
+.tsp .btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.tsp .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tsp .btn.is-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.tsp .btn.is-accent:hover {
+  filter: brightness(1.07);
+  color: var(--accent-ink);
+}
+
+.tsp .btn.is-ghost {
+  background: transparent;
+}
+
+.tsp .btn.is-small {
+  padding: 3px 8px;
+  font-size: 11.5px;
+}
+
+.tsp .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+/* -------------------------------------------------------------- workbench */
+.tsp .workbench {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 20px 18px;
+}
+
+.tsp .pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.tsp .pane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  min-height: 42px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.tsp .pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tsp .pane-file {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tsp .pane-head-spacer {
+  flex: 1 1 auto;
+}
+
+.tsp .pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.tsp .pane-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ----------------------------------------------------------------- tabs -- */
+.tsp .tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  overflow-x: auto;
+  /* `overflow-x: auto` alone would make this scrollable vertically too, and
+     focusing a tab would then nudge the row out of view. */
+  overflow-y: hidden;
+  scrollbar-width: none;
+  align-items: flex-end;
+}
+
+.tsp .tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tsp .tab {
+  position: relative;
+  padding: 8px 12px 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 8px 8px 0 0;
+}
+
+.tsp .tab:hover {
+  color: var(--text-dim);
+  background: var(--surface-3);
+}
+
+.tsp .tab[aria-selected='true'] {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.tsp .tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.tsp .tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.tsp .tab-count.is-bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tsp .tab-count.is-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+/* ----------------------------------------------------------------- code -- */
+.tsp .editor-host {
+  position: absolute;
+  inset: 0;
+}
+
+.tsp .code-fallback {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow: auto;
+  color: var(--text-dim);
+}
+
+/* ------------------------------------------------------------- messages -- */
+.tsp .notice {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.tsp .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.tsp .empty strong {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.tsp .spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: tsp-spin 0.7s linear infinite;
+}
+
+@keyframes tsp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tsp .diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.tsp .diagnostic {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.tsp .diagnostic-loc {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tsp .diagnostic-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.tsp .diagnostic-msg {
+  grid-column: 2;
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- table -- */
+.tsp .schema-intro {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.tsp .schema-intro code {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+.tsp table.schema {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.tsp table.schema th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tsp table.schema td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.tsp table.schema tr:last-child td {
+  border-bottom: none;
+}
+
+.tsp table.schema tr:hover td {
+  background: var(--surface-2);
+}
+
+.tsp .cell-path,
+.tsp .cell-env {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.tsp .cell-env {
+  color: var(--accent);
+}
+
+.tsp .cell-path-parent {
+  color: var(--muted);
+}
+
+.tsp .type-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.tsp .badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.tsp .badge.req {
+  background: var(--surface-3);
+  color: var(--text-dim);
+}
+
+.tsp .badge.opt {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--muted);
+}
+
+.tsp .badge.secret {
+  background: var(--secret-soft);
+  color: var(--secret);
+}
+
+.tsp .badge.default {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------- live run -- */
+.tsp .run {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.tsp .run-env {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 46%;
+  min-height: 168px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tsp .run-out {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 54%;
+}
+
+.tsp .run-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tsp .run-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tsp .run-hint {
+  padding: 7px 14px 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.tsp .run-hint code {
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+.tsp .env-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tsp .env-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(0, 1.15fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.tsp .env-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.tsp .env-row input:focus-visible {
+  border-color: var(--accent);
+}
+
+.tsp .env-row input.key {
+  color: var(--accent);
+}
+
+.tsp .env-row.is-bad input.value {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.tsp .env-row .drop {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tsp .env-row .drop:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tsp .result-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.tsp .result-banner.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.tsp .result-banner.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tsp .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.tsp .issues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.tsp .issue {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 9px 12px;
+}
+
+.tsp .issue.is-secret {
+  border-left-color: var(--secret);
+}
+
+.tsp .issue-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.tsp .issue-path {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.tsp .issue-code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tsp .issue-msg {
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.tsp .issue-meta {
+  margin-top: 6px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tsp .issue-meta b {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.tsp .redacted {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--secret-soft);
+  color: var(--secret);
+  font-size: 12px;
+}
+
+.tsp .redacted code {
+  font-family: var(--mono);
+  letter-spacing: 0.14em;
+}
+
+.tsp .precedence {
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.tsp .precedence h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tsp .precedence ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tsp .precedence li {
+  counter-increment: step;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tsp .precedence li::before {
+  content: counter(step);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.tsp .precedence li.is-live {
+  color: var(--text-dim);
+}
+
+.tsp .precedence li.is-live::before {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.tsp .precedence li em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.tsp .statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tsp .statusbar .sep {
+  opacity: 0.4;
+}
+
+.tsp .fingerprint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tsp .toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12.5px;
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+
+/* --------------------------------------------------------------- mobile -- */
+@media (max-width: 900px) {
+  .tsp .shell {
+      height: auto;
+      min-height: 100dvh;
+  }
+
+  .tsp .workbench {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 12px;
+      gap: 12px;
+  }
+
+  .tsp .pane.editor-pane .pane-body {
+      height: 46vh;
+      min-height: 300px;
+      flex: none;
+  }
+
+  .tsp .pane.output-pane {
+      min-height: 60vh;
+  }
+
+  .tsp .pane-scroll {
+      overflow: visible;
+  }
+
+  .tsp .run-env,
+  .tsp .run-out {
+      flex: none;
+  }
+
+  .tsp .env-rows {
+      overflow: visible;
+  }
+
+  .tsp .env-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      row-gap: 4px;
+  }
+
+  .tsp .env-row input.key {
+      grid-area: 1 / 1;
+  }
+
+  .tsp .env-row .drop {
+      grid-area: 1 / 2;
+  }
+
+  .tsp .env-row input.value {
+      grid-area: 2 / 1 / 3 / -1;
+  }
+
+  .tsp .topbar {
+      padding: 10px 12px;
+      gap: 10px;
+  }
+
+  .tsp .brand-tag {
+      display: none;
+  }
+
+  .tsp .topbar-tools .btn {
+      padding: 5px 9px;
+      font-size: 12px;
+  }
+
+  .tsp .prefix-field {
+      padding-left: 8px;
+  }
+
+  .tsp .prefix-field input {
+      width: 62px;
+  }
+
+  .tsp table.schema th,
+  .tsp table.schema td {
+      padding: 8px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tsp * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tsp .table-wrap {
+  overflow-x: auto;
+}
+
+.tsp .note-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The output pane is its own layout context, so the schema table reflows on
+pane width rather than viewport width — it stacks in a split view too. */
+.tsp .output-pane .pane-body {
+  container-type: inline-size;
+  container-name: output;
+}
+
+@container output (max-width: 640px) {
+  .tsp table.schema thead {
+      display: none;
+  }
+
+  .tsp table.schema,
+  .tsp table.schema tbody {
+      display: block;
+  }
+
+  .tsp table.schema tr {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+  }
+
+  .tsp table.schema td {
+      display: block;
+      padding: 0;
+      border: none;
+  }
+
+  .tsp table.schema td.cell-path {
+      flex: 1 0 100%;
+      font-size: 13px;
+  }
+
+  .tsp table.schema td.cell-env {
+      flex: 1 0 100%;
+      font-size: 12px;
+  }
+
+  .tsp table.schema td.cell-env::before {
+      content: '→ ';
+      color: var(--muted);
+  }
+}
+
+.tsp .tab-action {
+  margin: 0 2px 7px;
+}

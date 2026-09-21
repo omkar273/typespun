@@ -21,6 +21,18 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "typespun-codegen": [
+        "../packages/codegen/dist/index.d.ts"
+      ],
+      "typespun/generated": [
+        "../packages/typespun/dist/generated.d.ts"
+      ],
+      "typespun/schema": [
+        "../packages/typespun/dist/schema.d.ts"
+      ],
+      "typescript": [
+        "../node_modules/typescript/lib/typescript.d.ts"
       ]
     },
     "plugins": [

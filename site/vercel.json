@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "bun install",
-  "buildCommand": "bun run build",
+  "installCommand": "bun install --cwd .. && bun install",
+  "buildCommand": "bun run --cwd .. build && bun run build",
   "headers": [
     {
       "source": "/(.*)\\.svg",

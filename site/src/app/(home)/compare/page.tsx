@@ -28,7 +28,7 @@ export default function Page() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
       <JsonLd data={softwareApplicationJsonLd} />
-      <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-teal dark:text-brand-teal-bright">
+      <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-accent dark:text-brand-accent-bright">
         Comparison
       </p>
       <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
