@@ -91,7 +91,7 @@ function Cell({ mark, highlight }: { mark: Mark; highlight: boolean }) {
   return (
     <td
       className={cn(
-        'px-3 py-3 text-center align-middle',
+        'relative px-3 py-3 text-center align-middle',
         highlight && 'bg-brand-accent/[0.06] dark:bg-brand-accent-bright/[0.07]',
       )}
     >
@@ -145,12 +145,12 @@ export function FeatureMatrix({ verified }: { verified: string }) {
   return (
     <figure className="not-prose my-8">
       <div className="overflow-x-auto rounded-xl border border-fd-border bg-fd-card">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+        <table className="w-full min-w-[680px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-fd-border">
               <th
                 scope="col"
-                className="sticky left-0 z-10 bg-fd-card px-4 py-3 text-left font-medium text-fd-muted-foreground"
+                className="sticky left-0 z-10 w-[9.5rem] min-w-[9.5rem] bg-fd-card px-3 py-3 text-left font-medium text-fd-muted-foreground sm:w-auto sm:min-w-0 sm:px-4"
               >
                 Capability
               </th>
@@ -187,7 +187,7 @@ export function FeatureMatrix({ verified }: { verified: string }) {
                 >
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 bg-fd-card px-4 py-3 text-left font-normal"
+                    className="sticky left-0 z-10 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] bg-fd-card px-3 py-3 text-left text-[13px] font-normal leading-snug sm:w-auto sm:min-w-0 sm:max-w-none sm:px-4 sm:text-sm"
                   >
                     {row.label}
                     {row.note && (
@@ -212,7 +212,10 @@ export function FeatureMatrix({ verified }: { verified: string }) {
           Yes, partly and no, judged against each project&apos;s own
           documentation on {verified}. A missing tick means the documentation
           does not describe the capability, not that it is impossible.
-          Swipe sideways on a narrow screen.
+          <span className="sm:hidden">
+            {' '}
+            Swipe the table sideways to see every tool.
+          </span>
         </p>
         <ul className="space-y-1">
           {notes.map((row) => (
