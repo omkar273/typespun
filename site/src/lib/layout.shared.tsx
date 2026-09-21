@@ -27,7 +27,7 @@ function Logo() {
       <span className="font-display font-semibold tracking-tight">
         {appName}
       </span>
-      <span className="ts-tagline hidden text-xs font-normal text-fd-muted-foreground sm:inline">
+      <span className="ts-tagline hidden text-xs font-normal text-fd-muted-foreground md:inline">
         {appTagline}
       </span>
     </span>

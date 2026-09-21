@@ -309,7 +309,7 @@ pnpm add --save-dev typespun-codegen`}
             </p>
           </div>
         </div>
-        <div className="mt-6 rounded-xl border border-dashed border-fd-border p-5 sm:flex sm:items-baseline sm:gap-6">
+        <div className="mt-6 rounded-xl border border-dashed border-fd-muted-foreground/40 p-5 sm:flex sm:items-baseline sm:gap-6">
           <h3 className="shrink-0 font-display font-medium">
             When not to use it
           </h3>
