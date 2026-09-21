@@ -159,12 +159,42 @@ jobs:
           bun pm pack --ignore-scripts
           mv typespun-codegen-*.tgz ../../.release/typespun-codegen.tgz
 
+      # The skip guard above reads `npm view`, but the registry does not offer
+      # read-your-writes: after 0.1.3 went out, a run 90 seconds later still
+      # saw 0.1.2 and tried to republish, failing the workflow with E409. A
+      # conflict means the exact version is already on the registry, which is
+      # the state this job wanted — treat it as success and let every other
+      # error still fail the build.
       - name: Publish typespun
         if: steps.release.outputs.should_publish == 'true'
         run: |
           npm whoami
-          npm publish .release/typespun.tgz --access public --provenance --tag "${{ steps.tag.outputs.tag }}"
+          publish_or_accept_conflict() {
+            local tarball="$1"
+            local log
+            log="$(mktemp)"
+            if npm publish "$tarball" --access public --provenance \
+              --tag "${{ steps.tag.outputs.tag }}" 2>&1 | tee "$log"; then
+              return 0
+            fi
+            if grep -qE 'E409|cannot publish over|already exists' "$log"; then
+              echo "::notice::Version already on the registry; treating as published."
+              return 0
+            fi
+            return 1
+          }
+          publish_or_accept_conflict .release/typespun.tgz
 
       - name: Publish typespun-codegen
         if: steps.release.outputs.should_publish == 'true'
-        run: npm publish .release/typespun-codegen.tgz --access public --provenance --tag "${{ steps.tag.outputs.tag }}"
+        run: |
+          log="$(mktemp)"
+          if npm publish .release/typespun-codegen.tgz --access public --provenance \
+            --tag "${{ steps.tag.outputs.tag }}" 2>&1 | tee "$log"; then
+            exit 0
+          fi
+          if grep -qE 'E409|cannot publish over|already exists' "$log"; then
+            echo "::notice::Version already on the registry; treating as published."
+            exit 0
+          fi
+          exit 1

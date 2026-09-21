@@ -278,6 +278,36 @@ Numbers must be complete finite numeric strings; booleans are case-insensitive
 `true` or `false`; arrays must be JSON arrays with a uniform supported element
 type. Typed overrides are validated but never string-coerced.
 
+### Running TypeScript directly on Node.js fails to find the loader
+
+Generated modules import the declaration with a `.js` specifier, which is the
+correct NodeNext convention for TypeScript that is compiled before it runs.
+Node.js's built-in type stripping does not rewrite specifiers, so running a
+`.ts` entry point directly cannot resolve it:
+
+```console
+$ node src/index.ts
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/generated/typespun.js'
+```
+
+Two things work. Compile first, which is what CI exercises on Node.js 22, 24
+and 26:
+
+```sh
+tsc -p tsconfig.json
+node dist/index.js
+```
+
+Or use a runtime that resolves TypeScript specifiers itself, such as Bun:
+
+```sh
+bun src/index.ts
+```
+
+Decorated class declarations are a separate case: Node.js type stripping
+rejects decorator syntax outright, so the `--style class` form needs Bun or a
+TypeScript-aware loader regardless of how specifiers resolve.
+
 ### A generated import has the wrong extension
 
 Make sure `tsconfig.json` uses the intended module and module-resolution mode,

@@ -45,6 +45,39 @@ interface LoadConfigOptions<T> {
 The call is synchronous and returns a newly reconstructed object. Resolved
 arrays are shallow-cloned. It throws `ConfigError` when issues exist.
 
+## The returned object
+
+`loadConfig()` returns a newly reconstructed object whose every level has a
+**null prototype**, including nested branches. This is deliberate: a
+configuration object is built from external input, and a null prototype means
+a key such as `__proto__` arriving from the environment cannot reach
+`Object.prototype`.
+
+The practical consequence is that inherited methods are not available:
+
+```ts
+const config = loadConfig();
+
+Object.getPrototypeOf(config.server); // null
+config.server.hasOwnProperty('port'); // TypeError: not a function
+
+// These all work:
+Object.hasOwn(config.server, 'port'); // true
+JSON.stringify(config.server); // {"host":"127.0.0.1","port":3000}
+const copy = { ...config.server }; // ordinary object
+```
+
+Property access, spreading, `JSON.stringify`, `Object.keys` and `Object.hasOwn`
+behave normally, so most code never notices. Two things do:
+
+- Libraries that duck-type with `value.hasOwnProperty(...)` or
+  `value.toString()` rather than the `Object.*` equivalents.
+- `console.log` and `util.inspect`, which render the object as
+  `[Object: null prototype] { ... }`.
+
+If you need a conventional object, spread it: `{ ...config }` produces one with
+`Object.prototype`, though only at the level you spread.
+
 ## Generated ABI
 
 The `typespun/generated` entry point also exports `createLoader<T>(schema)`,

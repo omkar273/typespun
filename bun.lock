@@ -63,7 +63,7 @@
     },
     "packages/codegen": {
       "name": "typespun-codegen",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "bin": {
         "typespun-codegen": "dist/bin.js",
       },
@@ -75,7 +75,7 @@
     },
     "packages/typespun": {
       "name": "typespun",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "bin": {
         "typespun": "dist/bin.js",
       },

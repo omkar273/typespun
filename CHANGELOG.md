@@ -9,6 +9,32 @@ generated-module ABI is versioned separately by `GeneratedSchema.protocolVersion
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-22
+
+### Fixed
+
+- The publish workflow treats an `E409` conflict as success. Its skip guard
+  reads `npm view`, but the registry does not offer read-your-writes: a run
+  ninety seconds after `0.1.3` went out still saw `0.1.2`, tried to republish
+  and failed the build. Every other publish error still fails.
+
+### Changed
+
+- The npm package pages point at the documentation site. The playground moved
+  from GitHub Pages into the site at `/playground`, so the old link is dead in
+  the `0.1.4` tarballs; a package page can only be corrected by publishing.
+
+### Documentation
+
+- The object `loadConfig()` returns has a null prototype at every level, so
+  `config.server.hasOwnProperty(...)` throws while `Object.hasOwn`, spreading
+  and `JSON.stringify` all work. This is a prototype-pollution defence and was
+  previously undocumented.
+- Running a `.ts` entry point directly on Node.js cannot resolve the
+  generated module, because type stripping does not rewrite the `.js`
+  specifier. Compiling first, or using Bun, both work. Decorated classes need
+  a TypeScript-aware runtime regardless.
+
 ## [0.1.4] - 2026-09-22
 
 ### Fixed
@@ -108,7 +134,8 @@ First publish with a usable `dist` for both packages: schema analysis, the
 runtime resolver with fixed source precedence, aggregated `ConfigError`
 diagnostics, and secret-aware redaction.
 
-[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/omkar273/typespun/releases/tag/v0.1.5
 [0.1.4]: https://github.com/omkar273/typespun/releases/tag/v0.1.4
 [0.1.3]: https://github.com/omkar273/typespun/releases/tag/v0.1.3
 [0.1.2]: https://github.com/omkar273/typespun/releases/tag/v0.1.2
