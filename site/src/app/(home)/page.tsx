@@ -238,15 +238,15 @@ pnpm add --save-dev typespun-codegen`}
       {/* ------------------------------------------------------------ Precedence */}
       <section className="border-y border-fd-border bg-fd-muted/40">
         <div className="mx-auto w-full max-w-5xl px-4 py-14 sm:py-20">
-          <Eyebrow>The sharpest difference</Eyebrow>
+          <Eyebrow>Predictable by design</Eyebrow>
           <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">
-            Five sources, one documented order
+            Overrides beat env vars. Env vars beat .env files. Always.
           </h2>
           <p className="mt-3 max-w-2xl text-fd-muted-foreground">
             Most environment libraries validate a single source. Typespun
-            resolves every leaf independently and takes the highest-precedence{' '}
-            <em>defined</em> candidate before coercion, so an invalid lower
-            source cannot break a valid higher one.
+            merges five, in the order below, one field at a time. It picks the
+            highest-priority value that exists, then validates it, so a bad
+            value in a lower source can never break a good one above it.
           </p>
 
           <ol className="mt-8 space-y-px overflow-hidden rounded-xl border border-fd-border bg-fd-border">
