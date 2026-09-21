@@ -4,7 +4,6 @@ import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { Install } from '@/components/install';
 import { JsonLd } from '@/components/json-ld';
 import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
-import { Mark } from '@/lib/layout.shared';
 import { links } from '@/lib/shared';
 
 export function generateMetadata(): Metadata {
@@ -51,6 +50,20 @@ const config = loadConfig({
   source: process.env,
   overrides: { server: { port: 4000 } },
 });`;
+
+const HERO_DECLARATION = `// src/config.ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  origins: string[];
+  /** @env DATABASE_URL */
+  databaseUrl?: string;
+}`;
+
+const HERO_RESULT = `// What your app gets
+const config = loadConfig();
+config.server.port; // number
+config.databaseUrl; // string | undefined`;
 
 const FAILURE_INPUT = `loadConfig({ source: { APP_PORT: 'not-a-number' } });`;
 
@@ -119,12 +132,7 @@ export default function HomePage() {
           aria-hidden="true"
           className="ts-grid pointer-events-none absolute inset-0 opacity-50"
         />
-        <Mark
-          size={520}
-          strokeWidth={2.5}
-          className="pointer-events-none absolute -right-24 top-1/2 hidden -translate-y-1/2 text-fd-foreground opacity-[0.05] lg:block"
-        />
-        <div className="relative mx-auto grid w-full max-w-5xl items-center gap-12 px-4 pt-16 pb-14 sm:pt-24 sm:pb-20 lg:grid-cols-[1.1fr_1fr]">
+        <div className="relative mx-auto grid w-full max-w-5xl items-center gap-12 px-4 pt-12 pb-14 sm:pt-16 sm:pb-16 lg:grid-cols-[1.2fr_1fr]">
           <div className="min-w-0">
             <Eyebrow>For TypeScript services on Bun and Node.js</Eyebrow>
             <h1 className="mt-4 text-4xl font-semibold leading-[1.08] sm:text-5xl">
@@ -155,12 +163,6 @@ export default function HomePage() {
               >
                 Read the docs
               </Link>
-              <Link
-                href="/compare"
-                className="px-1 py-2.5 text-sm font-medium underline underline-offset-4 decoration-fd-border hover:decoration-current"
-              >
-                Compared with t3-env, envalid and Zod
-              </Link>
             </div>
 
             <div className="mt-8 w-full min-w-0 max-w-md">
@@ -185,15 +187,15 @@ pnpm add --save-dev typespun-codegen`}
             </div>
           </div>
 
-          <div className="min-w-0">
-            <p className="mb-2 text-sm text-fd-muted-foreground">
-              This is the whole declaration:
+          <div className="min-w-0 space-y-3">
+            <p className="text-sm font-medium text-fd-muted-foreground">
+              1. Write the declaration
             </p>
-            <DynamicCodeBlock lang="ts" code={AFTER_DECLARATION} />
-            <p className="mt-3 text-sm text-fd-muted-foreground">
-              <code>typespun generate</code> turns it into a committed,
-              validated <code>loadConfig()</code>.
+            <DynamicCodeBlock lang="ts" code={HERO_DECLARATION} />
+            <p className="pt-1 text-sm font-medium text-fd-muted-foreground">
+              2. Run <code>typespun generate</code>, then use it
             </p>
+            <DynamicCodeBlock lang="ts" code={HERO_RESULT} />
           </div>
         </div>
       </section>
