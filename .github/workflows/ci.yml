@@ -20,6 +20,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.1
+      # Vitest runs on Node, so pin it rather than inheriting the runner image's.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -49,4 +53,4 @@ jobs:
         run: bun run build
 
       - name: Test packed artifacts with Node.js
-        run: bun test tests/consumer/consumer.test.ts
+        run: npx --no-install vitest run tests/consumer/consumer.test.ts
