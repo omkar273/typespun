@@ -25,15 +25,18 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "bun run build && bun run test:unit && bun run test:package",
-    "test:package": "bun test tests/package/package.test.ts tests/consumer/consumer.test.ts",
-    "test:unit": "bun test packages/typespun/src packages/codegen/src --pass-with-no-tests",
+    "test:coverage": "bun run build && vitest run --coverage",
+    "test:package": "vitest run tests/",
+    "test:unit": "vitest run packages/ --passWithNoTests",
     "typecheck": "bun run --workspaces --if-present typecheck"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
+    "@vitest/coverage-v8": "5.0.1",
     "oxfmt": "0.67.0",
     "oxlint": "1.82.0",
     "tsup": "8.5.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "5.0.1"
   }
 }
