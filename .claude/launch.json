@@ -3,13 +3,12 @@
   "configurations": [
     {
       "name": "playground",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bun",
       "runtimeArgs": [
-        "--prefix",
-        "playground",
         "run",
+        "--cwd",
+        "playground",
         "dev",
-        "--",
         "--port",
         "5178",
         "--strictPort"

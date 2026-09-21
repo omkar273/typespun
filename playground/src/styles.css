@@ -319,7 +319,11 @@ textarea {
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
   overflow-x: auto;
+  /* `overflow-x: auto` alone would make this scrollable vertically too, and
+     focusing a tab would then nudge the row out of view. */
+  overflow-y: hidden;
   scrollbar-width: none;
+  align-items: flex-end;
 }
 
 .tabs::-webkit-scrollbar {
@@ -602,7 +606,8 @@ table.schema tr:hover td {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 42%;
+  flex: 0 1 46%;
+  min-height: 168px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -610,7 +615,7 @@ table.schema tr:hover td {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 58%;
+  flex: 1 1 54%;
 }
 
 .run-bar {
@@ -632,9 +637,16 @@ table.schema tr:hover td {
 }
 
 .run-hint {
-  padding: 8px 14px 0;
+  padding: 7px 14px 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.run-hint code {
+  font-family: var(--mono);
+  color: var(--text-dim);
 }
 
 .env-rows {
@@ -947,10 +959,19 @@ table.schema tr:hover td {
 
   .env-row {
     grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+
+  .env-row input.key {
+    grid-area: 1 / 1;
+  }
+
+  .env-row .drop {
+    grid-area: 1 / 2;
   }
 
   .env-row input.value {
-    grid-column: 1 / -1;
+    grid-area: 2 / 1 / 3 / -1;
   }
 
   .topbar {
@@ -960,6 +981,19 @@ table.schema tr:hover td {
 
   .brand-tag {
     display: none;
+  }
+
+  .topbar-tools .btn {
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+
+  .prefix-field {
+    padding-left: 8px;
+  }
+
+  .prefix-field input {
+    width: 62px;
   }
 
   table.schema th,
@@ -973,4 +1007,66 @@ table.schema tr:hover td {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.note-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The output pane is its own layout context, so the schema table reflows on
+   pane width rather than viewport width — it stacks in a split view too. */
+.output-pane .pane-body {
+  container-type: inline-size;
+  container-name: output;
+}
+
+@container output (max-width: 640px) {
+  table.schema thead {
+    display: none;
+  }
+
+  table.schema,
+  table.schema tbody {
+    display: block;
+  }
+
+  table.schema tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table.schema td {
+    display: block;
+    padding: 0;
+    border: none;
+  }
+
+  table.schema td.cell-path {
+    flex: 1 0 100%;
+    font-size: 13px;
+  }
+
+  table.schema td.cell-env {
+    flex: 1 0 100%;
+    font-size: 12px;
+  }
+
+  table.schema td.cell-env::before {
+    content: '→ ';
+    color: var(--muted);
+  }
+}
+
+.tab-action {
+  margin: 0 2px 7px;
 }

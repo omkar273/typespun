@@ -13,6 +13,24 @@ export default defineConfig({
     // second copy of the 10 MB compiler. One instance, always.
     dedupe: ['typescript', 'react', 'react-dom'],
     alias: [
+      // `bun install` copies `file:` dependencies into node_modules rather
+      // than symlinking them, so without these the playground would keep
+      // serving whatever `packages/*/dist` looked like at install time. The
+      // import specifiers in `src/typespun-engine.ts` stay at the package
+      // root; only where they resolve from changes.
+      {
+        find: /^typespun-codegen$/,
+        replacement: here('../packages/codegen/dist/index.js'),
+      },
+      {
+        find: /^typespun\/generated$/,
+        replacement: here('../packages/typespun/dist/generated.js'),
+      },
+      {
+        find: /^typespun$/,
+        replacement: here('../packages/typespun/dist/index.js'),
+      },
+
       // The TypeSpun *runtime* (`typespun/generated`) is bundled by tsup with
       // its dotenv reader inlined. That branch is unreachable in the
       // playground because `loadConfig` is always called without `envFiles`,
@@ -26,7 +44,8 @@ export default defineConfig({
     exclude: ['typespun', 'typespun-codegen'],
   },
   server: {
-    // ../packages/* are symlinked in; Vite must be allowed to read them.
+    // The aliases above point outside the project root, so Vite must be
+    // allowed to serve from ../packages.
     fs: { allow: [here('.'), here('..')] },
   },
   build: {
