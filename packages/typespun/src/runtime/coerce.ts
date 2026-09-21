@@ -32,15 +32,35 @@ export function coerceEnvironmentValue(
       return typedResult(kind, value);
     case 'array':
       if (value === '') {
-        return { error: `Expected an array of ${kind.element}` };
+        return { error: jsonArrayError(kind.element) };
       }
 
       try {
         return typedResult(kind, JSON.parse(value));
       } catch {
-        return { error: `Expected an array of ${kind.element}` };
+        return { error: jsonArrayError(kind.element) };
       }
   }
+}
+
+/**
+ * Environment values for array fields are JSON, not comma-separated. That is
+ * the first thing most people try, so the message names the expected form
+ * rather than only the expected type. Only reached for environment strings:
+ * typed overrides and compiled defaults are validated by validateTypedValue,
+ * whose message stays JSON-agnostic because those values are already parsed.
+ *
+ * Safe to be specific: resolve.ts replaces this message entirely for fields
+ * marked secret, so nothing here can describe a secret value.
+ */
+function jsonArrayError(element: 'string' | 'number' | 'boolean'): string {
+  const example =
+    element === 'string'
+      ? '["a","b"]'
+      : element === 'number'
+        ? '[1,2]'
+        : '[true,false]';
+  return `Expected a JSON array of ${element}, for example ${example}`;
 }
 
 export function validateTypedCandidate(

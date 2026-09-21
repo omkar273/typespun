@@ -875,6 +875,22 @@ describe('project configuration rejections', () => {
     ).toThrow(message);
   });
 
+  test('accepts and ignores $schema so editors can offer completion', () => {
+    const directory = withConfig(
+      '{"$schema":"https://typespun.dev/schema.json","input":"src/config.ts"}',
+    );
+
+    const result = loadProjectConfig({
+      projectDirectory: directory,
+      configPath: 'typespun.json',
+    });
+
+    // Present in the file, absent from the resolved configuration: it is a
+    // documentation affordance, not a Typespun setting.
+    expect(result.inputPath.endsWith('src/config.ts')).toBe(true);
+    expect(result).not.toHaveProperty('$schema');
+  });
+
   test('accepts defaults given as a bare string path', () => {
     const directory = withConfig(
       '{"input":"src/config.ts","defaults":"config/values.yaml"}',

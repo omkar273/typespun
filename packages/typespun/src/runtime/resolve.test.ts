@@ -170,6 +170,55 @@ describe('createLoader', () => {
     ]);
   });
 
+  test('names the JSON form when a comma-separated array is supplied', () => {
+    const error = getConfigError(() =>
+      load({
+        source: validSource({ ORIGINS: 'https://a.example,https://b.example' }),
+      }),
+    );
+
+    // Comma-separated is what most people try first, so the message has to
+    // say what the accepted form actually is, not just the expected type.
+    expect(error.issues).toEqual([
+      expect.objectContaining({
+        code: 'invalid_value',
+        path: 'origins',
+        message: 'Expected a JSON array of string, for example ["a","b"]',
+      }),
+    ]);
+  });
+
+  test('keeps the array hint out of diagnostics for a secret field', () => {
+    const secretSchema: GeneratedSchema = {
+      protocolVersion: 1,
+      fields: [
+        {
+          propertyPath: ['tokens'],
+          defaultsPath: ['tokens'],
+          envName: 'TOKENS',
+          kind: { type: 'array', element: 'string' },
+          required: true,
+          secret: true,
+          hasDefault: false,
+          optionalParents: [],
+        },
+      ],
+    };
+
+    const error = getConfigError(() =>
+      createLoader(secretSchema)({ source: { TOKENS: 'a,b' } }),
+    );
+
+    expect(error.issues).toEqual([
+      expect.objectContaining({
+        code: 'invalid_value',
+        path: 'tokens',
+        message: 'Invalid value for secret field',
+      }),
+    ]);
+    expect(error.issues[0]).not.toHaveProperty('received');
+  });
+
   test('does not coerce a string override that should already be typed', () => {
     const error = getConfigError(() =>
       load({ source: validSource(), overrides: { port: '5000' as never } }),

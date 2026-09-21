@@ -121,7 +121,17 @@ function readProjectConfig(path: string): RawProjectConfig {
 
   rejectUnknownKeys(
     value,
-    ['input', 'output', 'tsconfig', 'envPrefix', 'defaults', 'secretDefaults'],
+    [
+      // Accepted and ignored so editors can offer completion for the file the
+      // same way they do for tsconfig.json; it carries no Typespun meaning.
+      '$schema',
+      'input',
+      'output',
+      'tsconfig',
+      'envPrefix',
+      'defaults',
+      'secretDefaults',
+    ],
     'typespun.json',
   );
   assertOptionalString(value, 'input', 'typespun.json.input');
