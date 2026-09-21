@@ -298,6 +298,8 @@ export async function atomicWrite(
     await rename(temporaryPath, path);
     renamed = true;
   } finally {
+    /* v8 ignore next 2 -- these catch handlers only run if the cleanup itself
+       fails, which cannot be provoked without faulting the filesystem. */
     await handle?.close().catch(() => undefined);
     if (!renamed) await unlink(temporaryPath).catch(() => undefined);
   }

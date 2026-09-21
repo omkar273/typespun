@@ -1,163 +1,108 @@
-# Typespun
+<p align="center">
+  <img src="docs/assets/typespun-mark.svg" width="64" height="64" alt="Typespun threads converging into typed brackets">
+</p>
 
-> Declare configuration once in TypeScript, then generate the loader.
+# Typespun — typed configuration for TypeScript
+
+> Declare configuration once in TypeScript. Generate the validated loader.
+
+[![npm: typespun](https://img.shields.io/npm/v/typespun.svg?label=typespun)](https://www.npmjs.com/package/typespun)
+[![npm downloads](https://img.shields.io/npm/dm/typespun.svg?label=downloads)](https://www.npmjs.com/package/typespun)
+[![CI](https://github.com/omkar273/typespun/actions/workflows/ci.yml/badge.svg)](https://github.com/omkar273/typespun/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-132238.svg)](LICENSE)
+[![Node.js: 22+](https://img.shields.io/badge/Node.js-%E2%89%A5%2022-2D8C91.svg)](package.json)
+[![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-4D6FBF.svg)](package.json)
 
 ![Typespun — declare configuration once, then generate the loader](docs/assets/typespun-social-card.png)
 
-[![CI](https://github.com/omkar273/typespun/actions/workflows/ci.yml/badge.svg)](https://github.com/omkar273/typespun/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-132238.svg)](LICENSE)
-[![Node.js: 22 and 24](https://img.shields.io/badge/Node.js-22%20%7C%2024-2D8C91.svg)](package.json)
-[![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-4D6FBF.svg)](package.json)
-
-Typespun turns one TypeScript interface or schema-only class into deterministic,
-committable TypeScript that resolves and validates application configuration at
-startup.
-
-## The first runnable path
-
-![TypeScript declarations and configuration sources converging into a validated typed object](docs/assets/typespun-hero.png)
-
-Start in an ESM TypeScript project with Bun 1.4.1 or newer, a `package.json`,
-and a usable `tsconfig.json`. Install both packages, then initialize:
-
-```sh
-bun add typespun
-bun add --dev typespun-codegen
-bun typespun init --env-prefix APP
-```
-
-Using npm:
-
-```sh
-npm install typespun
-npm install --save-dev typespun-codegen
-npx typespun init --env-prefix APP
-```
-
-On a fresh project, `init` creates this declaration:
-
-```ts
-/** @typespun */
-export interface AppConfig {
-  port: number;
-}
-```
-
-It also creates a commented `typespun.json`:
-
-```jsonc
-{
-  "input": "src/config.ts",
-  "output": "src/generated/typespun.ts",
-  "envPrefix": "APP",
-
-  // "tsconfig": "tsconfig.json",
-  // "defaults": {
-  //   "path": "config.yaml",
-  //   "unknownKeys": "error" // "error", "warn", or "ignore"
-  // },
-  // "secretDefaults": "warn" // "warn", "allow", or "error"
-}
-```
-
-Every optional setting remains visible with its allowed values, but only the
-selected settings are active. `config.yaml` is discovered automatically.
-
-It creates `config.yaml` with a working default:
-
-```yaml
-port: 3000
-```
-
-It also adds `config:generate` and `config:check` scripts to `package.json`.
-Because both packages are installed, it generates the loader immediately:
-
-```console
-Created src/config.ts.
-Created config.yaml.
-Created typespun.json.
-Added config:generate and config:check scripts.
-Generated src/generated/typespun.ts.
-```
-
-Create `src/index.ts` and load the generated, typed configuration:
-
-```ts
-import { loadConfig } from './generated/typespun.js';
-
-const config = loadConfig();
-console.log(config.port);
-```
-
-```console
-$ bun src/index.ts
-3000
-```
-
-After changing the declaration or Typespun settings, rerun
-`bun run config:generate`. See the
-[copy-pasteable tutorial](docs/getting-started.md) for exact scaffold output,
-project requirements, flags, and validation behavior.
+A configuration field is usually described three times — as a TypeScript type, as
+`process.env` parsing, and as a runtime validation schema — and the three drift.
+Typespun makes one TypeScript declaration the build-time source of truth and emits
+a deterministic, committable loader that resolves sources in a fixed order and
+validates every field at startup. Fields marked secret omit their received values
+from Typespun's own diagnostics.
 
 ## Install
 
 ```sh
-bun add typespun
-bun add --dev typespun-codegen
+bun  add typespun && bun add --dev typespun-codegen
+npm  install typespun && npm install --save-dev typespun-codegen
+pnpm add typespun && pnpm add --save-dev typespun-codegen
 ```
 
-Equivalent installs are `npm install typespun && npm install --save-dev
-typespun-codegen` or `pnpm add typespun && pnpm add --save-dev
-typespun-codegen`.
+Supported engines are Bun 1.4.1 or newer and Node.js 22 or newer. CI exercises the
+packed packages on Bun 1.4.1 and Node.js 22, 24, and 26.
 
-Supported engines are Bun 1.4.1 or newer and Node.js 22 or 24. CI exercises the
-packed packages with Bun and both Node.js lines.
+## 30-second example
+
+Scaffold with `bun typespun init --env-prefix APP`, then declare configuration once:
+
+```ts
+// src/config.ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  origins: string[];
+  /** @env DATABASE_URL */
+  databaseUrl?: string;
+}
+```
+
+`bun run config:generate` writes the loader you commit (excerpt):
+
+```ts
+// src/generated/typespun.ts — generated by typespun-codegen. Do not edit.
+import { createLoader, type GeneratedSchema } from 'typespun/generated';
+import type { AppConfig as TypespunConfig } from '../config.js';
+
+export type Config = TypespunConfig;
+
+const schema = {
+  /* fingerprint, compiled defaults, per-field env keys (APP_SERVER_PORT, …) */
+} as const satisfies GeneratedSchema;
+
+export const loadConfig = createLoader<Config>(schema);
+```
+
+Application code imports it and gets a typed object, or one aggregated
+`ConfigError` listing every problem at once:
+
+```ts
+// src/index.ts
+import { loadConfig } from './generated/typespun.js';
+
+const config = loadConfig({
+  envFiles: [{ path: '.env', optional: true }],
+  source: process.env,
+  overrides: { server: { port: 4000 } },
+});
+
+console.log(`Listening on ${config.server.host}:${config.server.port}`);
+```
+
+The full walkthrough with exact console output is in
+[getting started](docs/getting-started.md); this runs as [`examples/interface`](examples/interface).
 
 ## Why Typespun?
 
-Configuration often describes the same field three times: as a TypeScript type,
-an environment parser, and a validation schema. Those copies drift. Typespun
-uses the TypeScript declaration as the build-time source of truth and emits the
-small runtime loader your application imports.
-
-- Interfaces are concise; decorated classes offer literal defaults.
-- Generated TypeScript is deterministic and intended for version control.
-- Resolution order is fixed and visible.
-- Missing and invalid values are reported together at startup.
-- Fields marked secret omit received values from Typespun diagnostics.
-
-## How it works
-
-![Typespun compiler and runtime architecture](docs/assets/architecture.svg)
-
-1. `typespun generate` loads `typespun.json` and the selected `tsconfig.json`.
-2. The compiler finds exactly one exported `@typespun` interface or `@Config()`
-   class and statically analyzes its fields.
-3. Optional JSON/YAML defaults are validated and embedded.
-4. A stable schema fingerprint and `loadConfig()` module are written atomically.
-5. At runtime, `loadConfig()` selects the highest-precedence value for every
-   field, coerces environment strings, and either returns `Config` or throws one
-   `ConfigError`.
-
-## Supported declarations
-
-Typespun supports nested object shapes whose leaves are `string`, finite
-`number`, `boolean`, string-literal unions or string enums, and arrays of
-`string`, `number`, or `boolean`. Optional properties and optional object
-branches are supported.
-
-Use JSDoc on interfaces (`@typespun`, `@env`, `@key`, `@default`, `@secret`,
-`@ignore`) or the corresponding inert decorators on classes (`Config`, `Env`,
-`Key`, `Default`, `Secret`, `Ignore`). JavaScript schemas, nullable unions,
-tuples, records/index signatures, dates, maps, sets, methods, computed fields,
-and recursive shapes are not supported.
-
-See [declarations](docs/concepts/declarations.md) and the
-[annotation reference](docs/api/decorators-and-annotations.md).
+- **One declaration, no drift.** The interface or decorated class _is_ the schema.
+- **Five sources, one documented order.** Most env libraries validate a single
+  source; Typespun resolves each leaf independently across all five.
+- **Deterministic, reviewable output.** Generation is byte-stable for the same
+  inputs, so the loader belongs in version control and `config:check` fails CI
+  when it goes stale. See [generated code](docs/concepts/generated-code.md).
+- **Secret-aware diagnostics.** An invalid `@secret` field reports its path and
+  environment key without the received value or type-specific detail — redaction
+  inside Typespun's own errors, not encryption, and no protection from your
+  application's logs.
+- **When _not_ to use it.** If you need custom transforms, dynamic or
+  runtime-fetched schemas, async secret providers, or a broad validation
+  ecosystem, use a schema library instead. Typespun's model is deliberately small
+  and asks you to accept a build step and committed output.
 
 ## Source precedence
 
-Highest precedence wins:
+Each leaf takes the highest-precedence value that is defined:
 
 1. typed `overrides`
 2. explicit `source`, or `process.env` when `source` is omitted
@@ -165,49 +110,46 @@ Highest precedence wins:
 4. compiled JSON/YAML defaults
 5. inline defaults
 
-Passing `source: {}` deliberately disables the ambient `process.env` fallback.
-Dotenv files are parsed without mutating `process.env`.
+Passing `source: {}` deliberately disables the ambient `process.env` fallback, and
+dotenv files are parsed without mutating `process.env`. See
+[source precedence](docs/concepts/source-precedence.md).
 
-See [source precedence](docs/concepts/source-precedence.md).
+## Supported declarations and limitations
 
-## Generated code, validation, and secrets
+Leaves may be `string`, finite `number`, `boolean`, string-literal unions or string
+enums, and arrays of those primitives, nested in object shapes with optional
+properties and optional branches. Annotate with JSDoc on interfaces (`@typespun`,
+`@env`, `@key`, `@default`, `@secret`, `@ignore`) or the matching inert decorators
+on classes (`Config`, `Env`, `Key`, `Default`, `Secret`, `Ignore`).
 
-Commit the generated module and run `bun run config:check` in CI. `check` does
-not write files; it exits nonzero if output is missing or stale. Generation is
-byte-stable for the same schema, project settings, defaults, and generator
-version.
-
-Runtime errors are aggregated in `ConfigError.issues`. For a secret field, an
-invalid-value issue includes the path and environment key but excludes the
-received value and type-specific details that could reveal allowed secrets.
-Typespun cannot redact values logged by your application or another library,
-and generated defaults are committed—do not place secrets there.
-
-Read [generated code](docs/concepts/generated-code.md) and
-[validation and redaction](docs/concepts/validation-and-redaction.md).
-
-## Compatibility and maturity
-
-The `typespun` runtime is configured with ESM and CommonJS entry points. Generated `.ts`,
-`.mts`, and `.cts` modules use import specifiers derived from the selected
-TypeScript module settings. The `typespun-codegen` package and CLI are ESM.
-
-The current source targets pre-release version `0.1.1`. Its scope is
-intentionally narrow: synchronous environment, dotenv, defaults-file, and
-override resolution; one configuration root per project; no provider plugin
-system or runtime JSON/YAML source.
+**Not supported:** JavaScript schemas, nullable unions, tuples, records and index
+signatures, dates, maps, sets, methods, computed fields, and recursive shapes.
+There is no plugin system, no asynchronous source and no runtime JSON/YAML
+loading, and a project has exactly one configuration root. Unsupported constructs
+fail generation rather than degrading silently. See
+[declarations](docs/concepts/declarations.md) and the
+[annotation reference](docs/api/decorators-and-annotations.md).
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
-- [Runtime API](docs/api/runtime.md)
-- [Generated loader API](docs/api/generated-loader.md)
-- [CLI reference](docs/api/cli.md)
-- [`typespun.json` reference](docs/reference/configuration.md)
-- [Runnable interface example](examples/interface)
-- [Runnable class example](examples/class)
+- [Generated code](docs/concepts/generated-code.md) · [Validation and redaction](docs/concepts/validation-and-redaction.md)
+- [Runtime API](docs/api/runtime.md) · [Generated loader API](docs/api/generated-loader.md)
+- [CLI reference](docs/api/cli.md) · [`typespun.json` reference](docs/reference/configuration.md)
+- Runnable examples: [interface](examples/interface) · [class](examples/class)
+
+## Compare to other approaches
+
+Manual parsing, schema-first runtime validation, TypeScript-only typing, and
+Typespun each trade something different. The
+[honest approach comparison](docs/launch/marketing-kit.md#honest-approach-comparison)
+sets out the source of truth, runtime dependency, strength, and cost of each —
+including where Typespun is the wrong choice.
 
 ## Project
+
+Typespun is pre-1.0; `typespun` and `typespun-codegen` are versioned and released
+together, so pin both during early adoption. See [CHANGELOG.md](CHANGELOG.md).
 
 - Contributions: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Support: [SUPPORT.md](SUPPORT.md)

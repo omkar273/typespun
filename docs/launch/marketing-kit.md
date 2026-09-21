@@ -24,7 +24,7 @@ defaults, dotenv files, an environment-shaped record, and typed overrides in a
 documented order. It converts supported environment strings, validates every
 field at startup, and aggregates failures in one `ConfigError`. Secret fields
 omit received values from Typespun diagnostics. The focused 0.1 scope supports
-Node.js 22/24 and Bun 1.4.1+, ESM and CommonJS runtime consumers, and
+Node.js 22 or newer and Bun 1.4.1+, ESM and CommonJS runtime consumers, and
 deterministic CI checks in one committed module.
 
 **GitHub description:** Declare typed configuration once; generate a validated
@@ -141,7 +141,7 @@ validation.
 dotenv → environment source → typed overrides. Startup failures are aggregated;
 secret candidates are omitted from Typespun diagnostics.
 
-**4/4** The 0.1 scope is intentionally narrow: Node.js 22/24, Bun 1.4.1+,
+**4/4** The 0.1 scope is intentionally narrow: Node.js 22+, Bun 1.4.1+,
 synchronous sources, and a focused type set. The question is simple: is a
 generation step worth eliminating the duplicated configuration contract?
 
@@ -177,13 +177,13 @@ constructs fail generation.
 
 ### Is it stable?
 
-The current source targets pre-release version 0.1.1. Pin versions and review
-generated diffs during early adoption.
+Typespun is pre-release. See the [changelog](../../CHANGELOG.md) for the
+current version; pin versions and review generated diffs during early adoption.
 
 ### What does “Node.js and Bun support” mean?
 
-The package engines declare Node.js 22/24 and Bun 1.4.1+. CI runs packed
-consumers on Node 22 and 24 and the repository checks on Bun 1.4.1. Other
+The package engines declare Node.js 22 or newer and Bun 1.4.1+. CI runs packed
+consumers on Node.js 22, 24, and 26, and the repository checks on Bun 1.4.1. Other
 versions are not claimed.
 
 ## Honest approach comparison

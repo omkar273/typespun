@@ -1,0 +1,162 @@
+# Typespun compared to the alternatives
+
+Configuration is a well-served corner of the TypeScript ecosystem. This page
+explains what Typespun does that the established options do not, where it fits,
+and — just as plainly — where you should use something else.
+
+Adoption figures were read from the npm and GitHub APIs on **2026-09-22**.
+
+## What Typespun does differently
+
+Most configuration libraries ask you to write a schema, then derive a type from
+it. Typespun inverts that: **the TypeScript declaration is the source of truth**,
+and the loader is generated from it.
+
+```ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  mode: 'development' | 'production';
+  /** @secret */
+  apiToken: string;
+}
+```
+
+```sh
+typespun generate
+```
+
+```ts
+import { loadConfig } from './generated/typespun.js';
+
+const config = loadConfig(); // fully typed, validated at startup
+```
+
+No schema to keep in sync. No type inference gymnastics. The interface _is_ the
+contract, and the generated module is a reviewable artifact you commit.
+
+Three capabilities follow from that, and each is uncommon in this category:
+
+### A documented precedence chain across five source kinds
+
+Most environment libraries validate one source. Typespun resolves every leaf
+independently, highest wins:
+
+1. typed `overrides`
+2. explicit `source`, or ambient `process.env` when omitted
+3. dotenv files, later entries beating earlier ones
+4. compiled JSON/YAML defaults
+5. inline declaration defaults
+
+It selects the highest-precedence _defined_ candidate before coercion, so an
+invalid lower-precedence source cannot break a valid higher-precedence one.
+See [source precedence](concepts/source-precedence.md).
+
+### Secret-aware diagnostics
+
+A leaf marked `@secret` omits its received value _and_ type-specific detail —
+such as the allowed enum members — from Typespun's own error output. Errors
+still tell you which field failed and which environment key it came from.
+
+This is redaction in diagnostics: not encryption, not a secret store, and it
+cannot scrub your application's logs. See
+[validation and redaction](concepts/validation-and-redaction.md).
+
+### A deterministic artifact that CI can check
+
+Generation is byte-stable for the same declaration, settings, defaults, and
+generator version. `typespun check` never writes and exits nonzero when output
+is stale, so configuration drift fails the build instead of production. See
+[generated code](concepts/generated-code.md).
+
+## Which one should you use?
+
+| You want…                                                                                                                                 | Use                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| A TypeScript interface as the single source of truth, a reviewable generated loader, an explicit precedence chain, or secret-aware errors | **Typespun**                         |
+| The smallest thing that validates environment variables                                                                                   | **Zod** inline, or **envalid**       |
+| A client/server variable split, especially in Next.js or Nuxt                                                                             | **t3-env**                           |
+| Hierarchical config files with per-environment overlays                                                                                   | **node-config** or **convict**       |
+| Async secret providers, custom transforms, or dynamic schemas                                                                             | **Zod**, **Valibot**, or **ArkType** |
+
+## Approach comparison
+
+| Approach                                                | Source of truth                                       | Runtime dependency | Main strength                                                                                    | Main cost                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **Typespun**                                            | The TypeScript declaration, plus a generated artifact | a small runtime    | Interface or class drives a reviewable loader with fixed precedence and secret-aware diagnostics | Requires a codegen step, committed output, and a deliberately narrow type/source model   |
+| Schema-first runtime validation (Zod, Valibot, ArkType) | The runtime schema                                    | a schema library   | Rich validation, transforms, huge ecosystem, Standard Schema                                     | The TS type is derived from or kept in sync with the schema; the schema ships to runtime |
+| Manual `process.env` parsing                            | Your code                                             | none               | Total control, no tooling                                                                        | You maintain parsing, coercion, aggregation, and precedence forever                      |
+| Config-file libraries (node-config, convict)            | Config files                                          | the library        | Mature layering across environments                                                              | Weak or manual TypeScript typing; values often typed `any`                               |
+| TypeScript types alone                                  | The type declaration                                  | none               | Zero ceremony                                                                                    | Types vanish at runtime, so external values are never actually checked                   |
+
+## The landscape
+
+For context on the category Typespun is entering:
+
+| Package                                                     | Weekly downloads |  Stars | Shape                                                                                    |
+| ----------------------------------------------------------- | ---------------: | -----: | ---------------------------------------------------------------------------------------- |
+| [`zod`](https://zod.dev)                                    |           213.9M | 43,984 | General schema validation; commonly pointed at `process.env`.                            |
+| [`dotenv`](https://github.com/motdotla/dotenv)              |           131.4M | 20,538 | Loads `.env` into `process.env`. No validation.                                          |
+| [`@t3-oss/env-core`](https://env.t3.gg)                     |            3.06M |  4,004 | Env validation with a server/client split. Accepts any Standard Schema validator.        |
+| [`node-config`](https://github.com/node-config/node-config) |            1.23M |      — | Hierarchical config files per `NODE_ENV`.                                                |
+| [`convict`](https://github.com/mozilla/node-convict)        |           883.5k |  2,374 | Schema plus config files and env, with a nested format.                                  |
+| [`envalid`](https://github.com/af/envalid)                  |           509.0k |  1,592 | Focused env validation with its own validator vocabulary.                                |
+| [`typia`](https://typia.io)                                 |           241.9k |  5,911 | Not configuration — but the same technique: TypeScript types compiled into runtime code. |
+
+Typespun is pre-release and new, with adoption far below every row above. Pin
+your versions and review generated diffs during early adoption.
+
+## When to choose something else
+
+**Plain Zod** — when you already depend on Zod and your needs stop at "parse
+`process.env`, fail loudly." Three lines and a schema beat any tool that adds a
+build step. One sharp edge t3-env documents well: applying transforms makes the
+inferred type describe the _transformed_ value while `process.env` still holds
+the original string.
+
+**t3-env** — when environment variables must be split between server and client,
+the case Next.js and Nuxt force on you, or when you want to keep your existing
+validator. It accepts any [Standard Schema](https://standardschema.dev)
+implementation, so you are not locked into one library.
+
+**envalid** — when you want focused environment validation with a small built-in
+validator vocabulary and good error messages, without adopting a general schema
+library.
+
+**node-config or convict** — when your configuration genuinely lives in layered
+files per environment and that layering matters more than static typing.
+
+**A runtime schema library** — when you need anything Typespun deliberately does
+not do: custom transforms, refinements, async or dynamic schemas, provider
+plugins, or validation of data that is not configuration.
+
+## What Typespun does not do
+
+The limits are the most useful thing to know up front:
+
+- **No async or plugin sources.** No AWS Secrets Manager, Vault, or custom
+  providers. Fetch the value yourself and pass a typed `override`.
+- **No runtime JSON/YAML loading.** Defaults files are validated and embedded at
+  generation time.
+- **A narrow type model.** Strings, finite numbers, booleans, string enums and
+  literal unions, arrays of those three primitives, and nested objects.
+  Nullable unions, tuples, records and index signatures, dates, maps, sets,
+  methods, computed fields, and recursive shapes all fail generation.
+- **No transforms or refinements.**
+- **One configuration root per project.**
+- **A build step and committed output.** If generated code in version control is
+  a dealbreaker, Typespun is the wrong shape for you.
+- **Two packages to install**, where every alternative here needs one.
+
+## Is the codegen step worth it?
+
+It depends on how much the duplication actually costs you. If your configuration
+is eight flat environment variables, a Zod schema is simpler and you should use
+that.
+
+The trade becomes worth making when the configuration contract is large enough
+that keeping a type, a parser, and a schema in sync is real work — and when
+having that contract visible in a diff and enforced in CI has value to your team.
+
+See also the [honest approach comparison](launch/marketing-kit.md#honest-approach-comparison)
+and the [FAQ](launch/marketing-kit.md#launch-day-faq).

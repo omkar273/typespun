@@ -675,3 +675,236 @@ describe('compiled defaults', () => {
     });
   });
 });
+
+describe('compiled defaults document failures', () => {
+  const policies = { unknownKeys: 'error', secretDefaults: 'allow' } as const;
+
+  test.each([
+    ['config.json', '{"server":', 'Defaults document is not valid JSON'],
+    ['config.yaml', 'server: [unclosed', 'Defaults document is not valid YAML'],
+    ['config.yaml', 'a: 1\na: 2\n', 'Defaults document is not valid YAML'],
+  ])('reports %s that cannot be parsed', (path, content, message) => {
+    const result = compileDefaults({ path, content }, fields, policies);
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({
+      code: 'invalid_defaults_document',
+      message,
+    });
+  });
+
+  test('rejects an alias bomb without expanding it', () => {
+    // Each anchor doubles the previous one; expansion is refused past the
+    // alias limit rather than materialised.
+    const content = `a: &a ["x","x","x","x","x"]
+b: &b [*a,*a,*a,*a,*a]
+c: &c [*b,*b,*b,*b,*b]
+d: [*c,*c,*c,*c,*c]
+`;
+
+    const result = compileDefaults(
+      { path: 'config.yaml', content },
+      fields,
+      policies,
+    );
+
+    expect(result.errors[0]).toMatchObject({
+      code: 'invalid_defaults_document',
+    });
+  });
+
+  test.each([
+    ['config.yaml', 'just a string\n'],
+    ['config.json', '[1,2]'],
+  ])(
+    'rejects %s whose root is not an object but keeps inline defaults',
+    (path, content) => {
+      const result = compileDefaults({ path, content }, fields, policies);
+
+      expect(result.errors).toEqual([
+        expect.objectContaining({
+          code: 'invalid_defaults_document',
+          message: 'Defaults document must contain an object at its root',
+        }),
+      ]);
+      // Inline field defaults still compile so the caller sees a usable shape.
+      expect(result.values).toEqual({
+        server: { host: 'localhost', port: 3000 },
+      });
+    },
+  );
+
+  test('keeps inline defaults when the document cannot be parsed at all', () => {
+    const result = compileDefaults(
+      { path: 'config.json', content: 'nope' },
+      fields,
+      policies,
+    );
+
+    expect(result.values).toEqual({
+      server: { host: 'localhost', port: 3000 },
+    });
+  });
+});
+
+describe('compiled defaults path safety', () => {
+  const policies = { unknownKeys: 'error', secretDefaults: 'allow' } as const;
+
+  function unsafeField(overrides: Partial<FieldIR> = {}): FieldIR {
+    return {
+      propertyPath: ['__proto__', 'polluted'],
+      defaultsPath: ['server', 'host'],
+      envName: 'APP_HOST',
+      kind: { type: 'string' },
+      required: true,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [],
+      location: { file: 'config.ts', line: 1, column: 1 },
+      ...overrides,
+    } as FieldIR;
+  }
+
+  test('refuses a compiled default whose property path is unsafe', () => {
+    const result = compileDefaults(
+      { path: 'config.yaml', content: 'server:\n  host: evil\n' },
+      [unsafeField()],
+      policies,
+    );
+
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        code: 'unsafe_defaults_key',
+        path: 'server.host',
+      }),
+    ]);
+    expect(Object.hasOwn(result.values, 'polluted')).toBe(false);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  test('refuses an inline default whose property path is unsafe', () => {
+    const result = compileDefaults(
+      { path: 'config.yaml', content: '{}\n' },
+      [unsafeField({ hasDefault: true, defaultValue: 'evil' })],
+      policies,
+    );
+
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: 'unsafe_defaults_key' }),
+    ]);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  test('clones object inline defaults and drops dangerous keys from them', () => {
+    // JSON.parse keeps __proto__ as an own property; an object literal would
+    // set the prototype instead.
+    const defaultValue: unknown = JSON.parse(
+      '{"host":"localhost","nested":{"deep":[1,2]},"__proto__":{"polluted":true}}',
+    );
+    const objectField = {
+      propertyPath: ['server'],
+      defaultsPath: ['server'],
+      envName: 'APP_SERVER',
+      kind: { type: 'string' },
+      required: false,
+      secret: false,
+      hasDefault: true,
+      defaultValue,
+      optionalParents: [],
+      location: { file: 'config.ts', line: 1, column: 1 },
+    } as unknown as FieldIR;
+
+    const result = compileDefaults(
+      { path: 'config.json', content: '{}' },
+      [objectField],
+      policies,
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(result.values).toEqual({
+      server: { host: 'localhost', nested: { deep: [1, 2] } },
+    });
+    expect(Object.hasOwn(result.values['server'] as object, '__proto__')).toBe(
+      false,
+    );
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('project configuration rejections', () => {
+  function withConfig(contents: string): string {
+    const directory = createProject();
+    writeProjectFile(directory, 'src/config.ts', '');
+    writeProjectFile(directory, 'tsconfig.json', '{}');
+    writeProjectFile(directory, 'typespun.json', contents);
+    return directory;
+  }
+
+  test('requires a tsconfig above the resolved input', () => {
+    const directory = createProject();
+    writeProjectFile(directory, 'src/config.ts', '');
+
+    expect(() => loadProjectConfig({ projectDirectory: directory })).toThrow(
+      /Could not find tsconfig\.json/,
+    );
+  });
+
+  test.each([
+    ['{ not json', 'Could not parse typespun.json as JSON with comments'],
+    ['{"nope":1}', 'Unknown typespun.json key: nope'],
+    ['{"input":5}', 'typespun.json.input must be a string'],
+    ['{"defaults":5}', 'typespun.json.defaults must be a string or object'],
+    ['{"defaults":{"oops":1}}', 'Unknown defaults key: oops'],
+    ['{"defaults":{"path":5}}', 'typespun.json.defaults.path must be a string'],
+    [
+      '{"defaults":{"unknownKeys":"nope"}}',
+      'typespun.json.defaults.unknownKeys must be error, warn, or ignore',
+    ],
+    [
+      '{"secretDefaults":"nope"}',
+      'typespun.json.secretDefaults must be warn, allow, or error',
+    ],
+  ])('rejects %s', (contents, message) => {
+    const directory = withConfig(contents);
+
+    expect(() =>
+      loadProjectConfig({
+        projectDirectory: directory,
+        configPath: 'typespun.json',
+      }),
+    ).toThrow(message);
+  });
+
+  test('accepts defaults given as a bare string path', () => {
+    const directory = withConfig(
+      '{"input":"src/config.ts","defaults":"config/values.yaml"}',
+    );
+    writeProjectFile(directory, 'config/values.yaml', 'port: 1\n');
+
+    const result = loadProjectConfig({
+      projectDirectory: directory,
+      configPath: 'typespun.json',
+    });
+
+    expect(result.defaultsPath).toBe(join(directory, 'config/values.yaml'));
+    expect(result.unknownKeys).toBe('error');
+  });
+
+  test.each([
+    ['input', '{"input":"src/config.txt"}', 'input must use a .ts'],
+    [
+      'output',
+      '{"input":"src/config.ts","output":"out/generated.js"}',
+      'output must use a .ts',
+    ],
+  ])('rejects an unusable %s extension', (_name, contents, message) => {
+    const directory = withConfig(contents);
+
+    expect(() =>
+      loadProjectConfig({
+        projectDirectory: directory,
+        configPath: 'typespun.json',
+      }),
+    ).toThrow(message);
+  });
+});

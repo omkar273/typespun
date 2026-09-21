@@ -570,6 +570,12 @@ test.each([
   'database = { ...{} };',
   'database = { get port() { return 1; } };',
   'database = { ["port"]: 1 };',
+  'database = { __proto__: 1 };',
+  'database = { constructor: 1 };',
+  'database = { port: 1, port: 2 };',
+  'database = { port: Math.random() };',
+  'port = 1e999;',
+  'port = -1e999;',
   'port = Infinity;',
   '@Default(Math.random()) port!: number;',
   '@Env(12) port = 1;',
@@ -993,4 +999,38 @@ interface Loop<T> extends Wrap<Loop<T[]>> {}
 /** @typespun */
 export interface Settings { loop: Loop<number> }`),
   ).toEqual([{ code: 'schema_too_deep', line: 1, column: 21 }]);
+});
+
+test('decorated class reads a string enum member through property access', () => {
+  const result = analyze(`import { Config, Default } from 'typespun';
+export enum Mode { Dev = 'dev', Prod = 'prod' }
+@Config()
+export class Settings {
+  @Default(Mode.Dev) mode!: Mode;
+}`);
+
+  expect(result.diagnostics).toEqual([]);
+  expect(result.fields.map((field) => field.defaultValue)).toEqual(['dev']);
+});
+
+test('decorated class does not resolve an enum member through element access', () => {
+  expect(
+    diagnosticSummary(`import { Config, Default } from 'typespun';
+export enum Mode { Dev = 'dev', Prod = 'prod' }
+@Config()
+export class Settings {
+  @Default(Mode['Prod']) mode!: Mode;
+}`),
+  ).toEqual([{ code: 'invalid_default', line: 5, column: 3 }]);
+});
+
+test('decorated class rejects a numeric enum member as a default', () => {
+  expect(
+    diagnosticSummary(`import { Config, Default } from 'typespun';
+export enum Level { Low = 1, High = 2 }
+@Config()
+export class Settings {
+  @Default(Level.High) level!: number;
+}`),
+  ).toEqual([{ code: 'invalid_default', line: 5, column: 3 }]);
 });

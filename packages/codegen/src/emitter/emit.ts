@@ -1,7 +1,7 @@
-import { dirname, extname, relative, sep } from 'node:path';
 import ts from 'typescript';
 import type { FieldSchema } from 'typespun/generated';
 import type { FieldIR, RootExport } from '../contracts.js';
+import { dirname, extname, relative } from '../internal/path.js';
 import { stableJson } from './fingerprint.js';
 
 export interface EmitGeneratedModuleOptions {
@@ -46,9 +46,7 @@ export function relativeTypeImportSpecifier(
   outputPath: string,
   compilerOptions: ts.CompilerOptions,
 ): string {
-  const relativePath = relative(dirname(outputPath), inputPath)
-    .split(sep)
-    .join('/');
+  const relativePath = relative(dirname(outputPath), inputPath);
   const withoutExtension = relativePath.slice(0, -extname(relativePath).length);
   const prefix = withoutExtension.startsWith('.')
     ? withoutExtension
