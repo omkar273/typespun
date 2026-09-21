@@ -9,7 +9,7 @@ import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
 const SLUG = ['compare'];
 
 const seo = {
-  title: 'Typespun vs t3-env, envalid and plain Zod',
+  title: 'Typespun vs t3-env, envalid and Zod',
   description:
     'Which tool to use for typed configuration in TypeScript: Typespun, t3-env, envalid, plain Zod, node-config or manual parsing. Includes the cases where Typespun is the wrong choice.',
   path: '/compare',
