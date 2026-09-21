@@ -51,6 +51,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./schema": {
+      "import": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.js"
+      },
+      "require": {
+        "types": "./dist/schema.d.cts",
+        "default": "./dist/schema.cjs"
+      }
+    },
     "./generated": {
       "import": {
         "types": "./dist/generated.d.ts",

@@ -1,6 +1,6 @@
 import ts from 'typescript';
-import type { FieldKind } from 'typespun/generated';
-import { validateTypedValue } from 'typespun/generated';
+import type { FieldKind } from 'typespun/schema';
+import { validateTypedValue } from 'typespun/schema';
 import type {
   AnalyzeResult,
   Diagnostic,

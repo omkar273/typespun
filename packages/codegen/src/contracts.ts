@@ -1,4 +1,4 @@
-import type { FieldKind, FieldSchema } from 'typespun/generated';
+import type { FieldKind, FieldSchema } from 'typespun/schema';
 
 export interface SourceLocation {
   readonly file: string;

@@ -1,6 +1,6 @@
 import { extname } from 'node:path';
 import { parseDocument } from 'yaml';
-import { validateTypedValue } from 'typespun/generated';
+import { validateTypedValue } from 'typespun/schema';
 import type {
   FieldIR,
   SecretDefaultsPolicy,

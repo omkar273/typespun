@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import type { FieldSchema } from 'typespun/generated';
+import type { FieldSchema } from 'typespun/schema';
 import type { FieldIR, RootExport } from '../contracts.js';
 import { dirname, extname, relative } from '../internal/path.js';
 import { stableJson } from './fingerprint.js';
