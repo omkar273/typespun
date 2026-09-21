@@ -11,7 +11,7 @@ const SLUG = ['compare'];
 const seo = {
   title: 'Typespun vs t3-env, envalid and plain Zod',
   description:
-    'An honest comparison of Typespun with t3-env, envalid, plain Zod, node-config and manual process.env parsing — including the cases where Typespun is the wrong choice.',
+    'Which tool to use for typed configuration in TypeScript: Typespun, t3-env, envalid, plain Zod, node-config or manual parsing. Includes the cases where Typespun is the wrong choice.',
   path: '/compare',
 };
 
@@ -28,7 +28,7 @@ export default function Page() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
       <JsonLd data={softwareApplicationJsonLd} />
-      <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-accent dark:text-brand-accent-bright">
+      <p className="font-display text-[13px] font-medium uppercase tracking-[0.12em] text-brand-accent dark:text-brand-accent-bright">
         Comparison
       </p>
       <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">

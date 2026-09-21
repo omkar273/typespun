@@ -1,13 +1,21 @@
 ---
-title: Typespun compared to the alternatives
-description: An honest comparison of Typespun with t3-env, envalid, plain Zod, node-config and manual process.env parsing — including the cases where Typespun is the wrong choice.
+title: Typespun vs t3-env, envalid and Zod
+description: Which tool to use for typed configuration in TypeScript, and the cases where Typespun is the wrong choice.
 ---
 
-Configuration is a well-served corner of the TypeScript ecosystem. This page
-explains what Typespun does that the established options do not, where it fits,
-and — just as plainly — where you should use something else.
+Configuration is a well-served corner of the TypeScript ecosystem, and for many
+projects a simpler tool is the right answer. This page tells you which one to
+pick, and where Typespun is the wrong choice.
 
-Adoption figures were read from the npm and GitHub APIs on **2026-09-22**.
+## The short answer
+
+| You want…                                                                                                                                 | Use                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| A TypeScript interface as the single source of truth, a reviewable generated loader, an explicit precedence chain, or secret-aware errors | **Typespun**                         |
+| The smallest thing that validates environment variables                                                                                   | **Zod** inline, or **envalid**       |
+| A client/server variable split, especially in Next.js or Nuxt                                                                             | **t3-env**                           |
+| Hierarchical config files with per-environment overlays                                                                                   | **node-config** or **convict**       |
+| Async secret providers, custom transforms, or dynamic schemas                                                                             | **Zod**, **Valibot**, or **ArkType** |
 
 ## What Typespun does differently
 
@@ -72,16 +80,6 @@ generator version. `typespun check` never writes and exits nonzero when output
 is stale, so configuration drift fails the build instead of production. See
 [generated code](/docs/concepts/generated-code).
 
-## Which one should you use?
-
-| You want…                                                                                                                                 | Use                                  |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| A TypeScript interface as the single source of truth, a reviewable generated loader, an explicit precedence chain, or secret-aware errors | **Typespun**                         |
-| The smallest thing that validates environment variables                                                                                   | **Zod** inline, or **envalid**       |
-| A client/server variable split, especially in Next.js or Nuxt                                                                             | **t3-env**                           |
-| Hierarchical config files with per-environment overlays                                                                                   | **node-config** or **convict**       |
-| Async secret providers, custom transforms, or dynamic schemas                                                                             | **Zod**, **Valibot**, or **ArkType** |
-
 ## Approach comparison
 
 | Approach                                                | Source of truth                                       | Runtime dependency | Main strength                                                                                    | Main cost                                                                                |
@@ -94,7 +92,8 @@ is stale, so configuration drift fails the build instead of production. See
 
 ## The landscape
 
-For context on the category Typespun is entering:
+For context on the category Typespun is entering. Adoption figures were read
+from the npm and GitHub APIs on **2026-09-22**.
 
 | Package                                                     | Weekly downloads |  Stars | Shape                                                                                    |
 | ----------------------------------------------------------- | ---------------: | -----: | ---------------------------------------------------------------------------------------- |
@@ -162,6 +161,11 @@ that keeping a type, a parser, and a schema in sync is real work — and when
 having that contract visible in a diff and enforced in CI has value to your team.
 
 <Cards>
+  <Card
+    title="Try it in the playground"
+    href="/playground"
+    description="Edit a declaration and watch the loader and startup errors update, with nothing to install."
+  />
   <Card
     title="Getting started"
     href="/docs"
