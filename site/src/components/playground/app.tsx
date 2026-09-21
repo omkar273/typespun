@@ -245,7 +245,7 @@ export default function Playground() {
       <div className="shell">
         <header className="topbar">
           <div className="brand">
-            <h1 className="page-title">Playground</h1>
+            <p className="page-title">Playground</p>
             <span className="brand-tag">
               one interface in, one validated config loader out
             </span>

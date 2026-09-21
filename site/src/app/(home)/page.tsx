@@ -162,13 +162,13 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/playground"
-                className="rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
+                className="rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
               >
                 Try it in 60 seconds
               </Link>
               <Link
                 href="/docs"
-                className="rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
+                className="rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
               >
                 Read the docs
               </Link>
@@ -393,7 +393,7 @@ pnpm add --save-dev typespun-codegen`}
               <a
                 key={item.title}
                 href={item.href}
-                className="group bg-fd-background p-5 transition-colors hover:bg-fd-accent"
+                className="group bg-fd-background p-5 transition-colors hover:bg-fd-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
               >
                 <h3 className="font-display font-medium group-hover:underline underline-offset-4">
                   {item.title}

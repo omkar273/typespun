@@ -12,5 +12,10 @@ export function generateMetadata(): Metadata {
 }
 
 export default function PlaygroundPage() {
-  return <PlaygroundClient />;
+  return (
+    <>
+      <h1 className="sr-only">Typespun playground</h1>
+      <PlaygroundClient />
+    </>
+  );
 }
