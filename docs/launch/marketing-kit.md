@@ -46,47 +46,105 @@ deterministic Typespun configuration loaders.
 
 ## Show HN
 
-**Title:** Show HN: Typespun – generate a typed configuration loader from a
-TypeScript declaration
+**Submit:** `https://typespun.vercel.app` — the landing page leads with the
+before/after and the playground is one click away. Link the repository in the
+first comment; do not make people hunt for the code.
 
-**First comment:** I built Typespun after repeating the same configuration
-contract in TypeScript types, environment parsing, and validation schemas.
-Typespun takes a narrower approach: mark one exported interface or schema-only
-class, run a compiler, and commit the generated loader.
+**Title:** Show HN: Typespun – generate a typed config loader from a TypeScript
+interface
 
-The loader resolves inline defaults, compiled JSON/YAML defaults, dotenv files,
-an environment-shaped record, and typed overrides in a fixed order. It validates
-at startup and returns all detectable issues together. Fields marked secret do
-not attach received values to Typespun diagnostics.
+**First comment:**
 
-The design is deliberately generated rather than reflection-based: the output
-is reviewable, checkable in CI, and does not instantiate configuration classes.
-The initial scope supports a small set of leaf types and synchronous sources;
-there is no provider plugin system or runtime config-file loading. I’d value
-feedback on that boundary and on the generated-code workflow.
+I kept writing the same configuration field three times: once as a TypeScript
+type, once as `process.env` parsing, and once as a validation schema. They
+drift, and the drift only shows up in production.
+
+Typespun inverts the usual order. Instead of writing a schema and deriving a
+type from it, you mark one exported interface and a compiler generates the
+loader:
+
+    /** @typespun */
+    export interface AppConfig {
+      server: { host: string; port: number };
+      /** @secret */ apiToken: string;
+    }
+
+`typespun generate` emits a `loadConfig()` module you commit. There is a
+playground that runs the real analyzer and the real runtime in your browser, so
+you can see the generated output without installing anything:
+https://typespun.vercel.app/playground
+
+Two things in there I have not seen done well elsewhere, and they are the
+reason the project exists:
+
+**A precedence chain across five source kinds.** Each leaf resolves
+independently, highest wins: typed overrides, an explicit source or
+`process.env`, dotenv files, compiled JSON/YAML defaults, then inline defaults.
+It picks the highest-precedence _defined_ candidate before coercion, so an
+invalid lower-precedence value cannot break a valid higher-precedence one.
+
+**Secret-aware diagnostics.** A field marked `@secret` omits its received value
+_and_ type-specific detail from the error output, while non-secret fields in the
+same error still show theirs. The playground's "Broken secret" preset
+demonstrates it side by side. This is redaction in Typespun's own diagnostics —
+not encryption, and it cannot scrub your application's logs.
+
+Honest about what it is not: the type model is deliberately narrow (strings,
+finite numbers, booleans, string enums, arrays of those, nested objects — no
+dates, records, tuples or transforms), there are no async or plugin sources, it
+needs two installs where every alternative needs one, and it is pre-1.0 with
+essentially no adoption. If your config is eight flat environment variables, a
+Zod schema is simpler and you should use that — the comparison page says so
+outright: https://typespun.vercel.app/compare
+
+The thing I would most like criticised is the central trade: a build step and a
+committed artifact, in exchange for the TypeScript declaration being the only
+place the contract lives. I think it is worth it past a certain config size and
+I would like to hear where that line actually falls for people.
+
+Code: https://github.com/omkar273/typespun
+
+**If asked "why not just Zod?"** — answer plainly rather than defensively. Zod
+is excellent and infers the type from the schema, so it is not three copies. The
+real difference is that the declaration lives in TypeScript where the rest of
+the application already is, the artifact is reviewable in a diff and checkable
+in CI, and the precedence and redaction behaviour is built in rather than
+assembled. That is a narrower claim than "Zod is worse", and it is the true one.
 
 ## r/typescript
 
-**Title:** Typespun: declare config once in TypeScript, then generate the loader
+**Title:** I generate my config loader from a TypeScript interface instead of
+writing a schema
 
-I kept seeing configuration expressed three times: a TypeScript type, manual
-`process.env` parsing, and a runtime schema. Typespun makes the TypeScript
-declaration the build-time source of truth.
+Configuration usually gets described three times — a TypeScript type,
+`process.env` parsing, and a runtime schema — and the copies drift.
+
+Typespun makes the interface the source of truth and generates the loader:
 
 ```ts
 /** @typespun */
 export interface AppConfig {
-  server: { port: number };
-  /** @secret */ token: string;
+  server: { host: string; port: number };
+  mode: 'development' | 'production';
+  /** @secret */ apiToken: string;
 }
 ```
 
-`typespun generate` emits a committed `loadConfig()` module. It supports
-documented precedence across defaults, dotenv, environment values, and typed
-overrides; aggregates startup errors; and omits secret candidates from its own
-diagnostics. Interfaces and decorated classes are supported. The 0.1 scope is
-intentionally small. I’d especially appreciate feedback on the generated-code
-workflow, supported type boundary, and source precedence.
+`typespun generate` writes a committed `loadConfig()` module. At startup it
+resolves typed overrides → explicit source or `process.env` → dotenv → compiled
+JSON/YAML defaults → inline defaults, validates every field, and throws one
+error with every problem rather than the first one.
+
+There is a browser playground that runs the actual analyzer and runtime, so you
+can try it without installing: https://typespun.vercel.app/playground
+
+Deliberate limits: narrow type set, no transforms, no async sources, two
+packages to install, pre-1.0. If you have a handful of flat env vars, Zod is
+simpler and I would use that instead.
+
+Runnable Hono and Fastify examples are in the repo. I would especially like
+feedback on whether the codegen step earns its keep, and on the supported type
+boundary.
 
 ## TypeScript Community Discord
 
