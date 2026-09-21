@@ -1,8 +1,9 @@
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-export const workspaceRoot = resolve(import.meta.dir, '../..');
+export const workspaceRoot = resolve(import.meta.dirname, '../..');
 
 export interface PackedArtifacts {
   readonly directory: string;
@@ -47,16 +48,16 @@ export function archivedPackageJson(
 }
 
 export function run(command: readonly string[], cwd = workspaceRoot): string {
-  const result = Bun.spawnSync(command, {
+  const [executable, ...args] = command;
+  const result = spawnSync(executable!, args, {
     cwd,
     env: process.env,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    encoding: 'utf8',
   });
-  if (result.exitCode !== 0) {
+  if (result.status !== 0) {
     throw new Error(
-      `${command.join(' ')} failed (${result.exitCode})\n${result.stdout.toString()}${result.stderr.toString()}`,
+      `${command.join(' ')} failed (${result.status})\n${result.stdout}${result.stderr}`,
     );
   }
-  return result.stdout.toString();
+  return result.stdout;
 }
