@@ -10,7 +10,7 @@ export function generateMetadata(): Metadata {
   return pageMetadata({
     title: 'Typespun — typed configuration for TypeScript',
     description:
-      'Declare configuration once as a TypeScript interface and generate a committed, validated loader: five documented source layers, aggregated startup errors, and secrets kept out of the diagnostics.',
+      'Write one TypeScript interface and generate a committed loader that reads env vars, dotenv files and defaults in a fixed order, validates every field at startup, and keeps secrets out of error output.',
     path: '/',
     absoluteTitle: true,
   });
@@ -101,7 +101,7 @@ const PROOF = [
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-display text-xs uppercase tracking-[0.18em] text-brand-accent dark:text-brand-accent-bright">
+    <p className="font-display text-[13px] font-medium uppercase tracking-[0.12em] text-brand-accent dark:text-brand-accent-bright">
       {children}
     </p>
   );
