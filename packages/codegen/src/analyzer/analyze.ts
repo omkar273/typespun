@@ -1,4 +1,3 @@
-import path from 'node:path';
 import ts from 'typescript';
 import type { FieldKind } from 'typespun/generated';
 import { validateTypedValue } from 'typespun/generated';
@@ -29,7 +28,9 @@ export function analyzeProgram(
   const symbols = typespunSymbols(program);
   const annotationsFor = (node: ts.Node) =>
     readAnnotations(node, report, checker, symbols);
-  const source = program.getSourceFile(path.resolve(inputPath));
+  // `getSourceFile` normalises the name and resolves relative paths against the
+  // compiler host's current directory, so no `node:path` resolution is needed.
+  const source = program.getSourceFile(inputPath);
   if (!source)
     return {
       inputPath,

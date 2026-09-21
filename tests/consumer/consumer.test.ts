@@ -46,19 +46,27 @@ afterAll(async () => {
 });
 
 describe('packed consumer', () => {
-  test('ES modules load the runtime, generated ABI, and codegen entry', async () => {
+  test('ES modules load the runtime, generated ABI, and the codegen pipeline', async () => {
     await writeFixture(
       'esm.mjs',
       `import { ConfigError } from 'typespun';
 import { createLoader } from 'typespun/generated';
 import * as codegen from 'typespun-codegen';
 const load = createLoader({ protocolVersion: 1, fields: [{ propertyPath: ['name'], defaultsPath: ['name'], envName: 'NAME', kind: { type: 'string' }, required: true, secret: false, hasDefault: false, optionalParents: [] }] });
-console.log(JSON.stringify({ name: load({ source: { NAME: 'Ada' } }).name, error: new ConfigError([]).name, codegen: typeof codegen }));
+const exported = ['analyzeProgram', 'createFingerprint', 'emitGeneratedModule', 'relativeTypeImportSpecifier', 'stableJson'].map((name) => typeof codegen[name]).join(',');
+const fingerprint = codegen.createFingerprint({ protocolVersion: 1, generatorVersion: '0.0.0', configuration: {}, analysis: {}, compiledDefaults: {} });
+console.log(JSON.stringify({ name: load({ source: { NAME: 'Ada' } }).name, error: new ConfigError([]).name, exported, canonical: codegen.stableJson({ b: 1, a: 2 }), fingerprint: /^[a-f0-9]{64}$/.test(fingerprint) }));
 `,
     );
 
     expect(run(['node', 'esm.mjs'], consumerDirectory)).toBe(
-      '{"name":"Ada","error":"ConfigError","codegen":"object"}\n',
+      `${JSON.stringify({
+        name: 'Ada',
+        error: 'ConfigError',
+        exported: 'function,function,function,function,function',
+        canonical: '{"a":2,"b":1}',
+        fingerprint: true,
+      })}\n`,
     );
   });
 

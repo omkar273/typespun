@@ -3,6 +3,32 @@
 Prepared 2026-09-22. All registry and GitHub figures were read from the npm and
 GitHub APIs on that date.
 
+> **Execution status — updated 2026-09-22, after Phase 1.**
+> The audit below is a point-in-time record and is deliberately left as written.
+> Several findings have since been fixed and no longer reflect the repository:
+>
+> - §1.3 #1 (npm version ordering) — **fixed.** `0.1.2` published to both
+>   packages; `latest` now sorts above every published version. `0.1.0` and
+>   `0.1.1` are deprecated on npm.
+> - §1.3 #2, #3, #5 (GitHub description, `rust` topic, circular homepage) —
+>   **fixed.** Description set, 14 accurate topics, `rust` removed.
+> - §1.3 #4 (`engines`) — **fixed.** Relaxed to `">=22"`, verified against
+>   Node.js 26.8.1; CI matrix is now 22, 24, 26.
+> - §1.3 #7 (no CHANGELOG, stale releases) — **fixed.** `CHANGELOG.md` added;
+>   `v0.1.2` release cut.
+> - §1.3 #8 (thin keywords) — **fixed.** 13 keywords per package; descriptions
+>   rewritten to carry the category.
+> - §1.3 #12 (no provenance) — **fixed.** SLSA provenance v1 attestations now
+>   published from CI.
+> - §1.4 (playground feasibility) — **confirmed by spike.** The pipeline runs on
+>   a fully virtual `ts.Program`. Additionally verified: the _runtime_ has no
+>   `node:` imports on the `resolve.ts` path, so `loadConfig()` can execute
+>   in-browser when an explicit `source` is passed and `envFiles` is omitted.
+> - §1.3 #9 (no programmatic API) and #10 (two-package install) — **open.**
+> - Known drift not in the original audit: `packages/*/package.json` still read
+>   `0.0.8` because the publish workflow rewrites versions without committing
+>   them back.
+
 Labels used throughout: **[FACT]** verified from the repo, an API, or a cited
 page · **[REC]** recommendation · **[ASSUME]** a stated assumption I could not
 verify · **[SPEC]** speculation about outcomes.

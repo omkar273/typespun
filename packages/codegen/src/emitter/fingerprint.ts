@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '../internal/sha256.js';
 
 export interface FingerprintInput {
   readonly protocolVersion: number;
@@ -9,7 +9,7 @@ export interface FingerprintInput {
 }
 
 export function createFingerprint(input: FingerprintInput): string {
-  return createHash('sha256').update(stableJson(input)).digest('hex');
+  return sha256Hex(stableJson(input));
 }
 
 export function stableJson(value: unknown, space?: number): string {

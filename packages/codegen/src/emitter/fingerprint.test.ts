@@ -44,4 +44,35 @@ describe('schema fingerprints', () => {
       createFingerprint({ ...base, compiledDefaults: { port: 3000 } }),
     );
   });
+
+  test('ignores undefined members so absent and explicit-undefined agree', () => {
+    const base = {
+      protocolVersion: 1 as const,
+      generatorVersion: '1.2.3',
+      configuration: { input: 'src/config.ts' },
+      analysis: { fields: [] },
+      compiledDefaults: {},
+    };
+
+    expect(
+      createFingerprint({
+        ...base,
+        configuration: { input: 'src/config.ts', envPrefix: undefined },
+      }),
+    ).toBe(createFingerprint(base));
+  });
+
+  test('keeps undefined array members distinguishable from absent ones', () => {
+    const base = {
+      protocolVersion: 1 as const,
+      generatorVersion: '1.2.3',
+      configuration: {},
+      analysis: { fields: [] },
+      compiledDefaults: {},
+    };
+
+    expect(
+      createFingerprint({ ...base, analysis: { fields: [undefined] } }),
+    ).not.toBe(createFingerprint(base));
+  });
 });

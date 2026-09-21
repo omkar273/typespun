@@ -26,6 +26,12 @@ export default defineConfig({
         // Type-only modules that erase to nothing at runtime.
         'packages/codegen/src/contracts.ts',
         'packages/codegen/src/analyzer/ir.ts',
+        // Process entry points: top-level-await scripts that can only run as a
+        // subprocess, so execution never registers here. Both are thin -- they
+        // parse argv and delegate -- and their logic lives in measured modules
+        // (cli/main.ts, cli-shim.ts). Behaviour is covered by the subprocess
+        // suites in cli.test.ts, bin.test.ts, and tests/consumer.
+        'packages/*/src/bin.ts',
       ],
 
       thresholds: {

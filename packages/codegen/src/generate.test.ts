@@ -289,3 +289,73 @@ function temporaryArtifacts(directory: string): string[] {
     (entry) => entry.startsWith('.typespun.') && entry.endsWith('.tmp'),
   );
 }
+
+describe('generation failure paths', () => {
+  test.each([
+    ['no version field', '{}'],
+    ['an empty version', '{"version":""}'],
+    ['a non-string version', '{"version":1}'],
+    ['a non-object manifest', '[]'],
+  ])('refuses to fingerprint a manifest with %s', (_name, manifest) => {
+    const directory = mkdtempSync(join(tmpdir(), 'typespun-manifest-'));
+    temporaryDirectories.push(directory);
+    const path = join(directory, 'package.json');
+    writeFileSync(path, manifest);
+
+    expect(() =>
+      createGenerationFingerprint(
+        {
+          protocolVersion: 1,
+          configuration: {},
+          analysis: {},
+          compiledDefaults: {},
+        },
+        pathToFileURL(path),
+      ),
+    ).toThrow('typespun-codegen package version is missing');
+  });
+
+  test('reports a tsconfig that parses but carries unusable options', async () => {
+    const projectDirectory = createProject();
+    write(
+      projectDirectory,
+      'tsconfig.json',
+      JSON.stringify({ compilerOptions: { target: 'NOT_A_TARGET' } }),
+    );
+
+    const result = await generateProject({ projectDirectory, mode: 'write' });
+
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      'typescript_config',
+    ]);
+  });
+
+  test('gives up after exhausting every temporary name', async () => {
+    const projectDirectory = createProject();
+    const outputPath = join(projectDirectory, 'generated.ts');
+    const collisionPath = join(projectDirectory, '.typespun.always.tmp');
+    writeFileSync(collisionPath, 'belongs to another process');
+
+    await expect(
+      atomicWrite(outputPath, 'contents', () => collisionPath),
+    ).rejects.toThrow('Could not reserve a temporary generated-output file.');
+
+    expect(readFileSync(collisionPath, 'utf8')).toBe(
+      'belongs to another process',
+    );
+    expect(() => statSync(outputPath)).toThrow();
+  });
+
+  test('propagates a temporary-file error that is not a name collision', async () => {
+    const projectDirectory = createProject();
+    const outputPath = join(projectDirectory, 'generated.ts');
+
+    await expect(
+      atomicWrite(outputPath, 'contents', () =>
+        join(projectDirectory, 'missing-directory', 'scratch.tmp'),
+      ),
+    ).rejects.toThrow(/ENOENT/);
+
+    expect(() => statSync(outputPath)).toThrow();
+  });
+});

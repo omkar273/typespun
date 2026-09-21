@@ -189,4 +189,31 @@ export const loadConfig = createLoader<Config>(schema);
       expect(resolved?.resolvedFileName).toBe(inputPath);
     },
   );
+
+  test('prefixes a specifier that would otherwise look like a bare module', () => {
+    // Output beside the project root, input below it: the relative path has no
+    // leading dot and must not be emitted as a package specifier.
+    expect(
+      relativeTypeImportSpecifier(
+        '/project/src/config.ts',
+        '/project/typespun.ts',
+        {},
+      ),
+    ).toBe('./src/config');
+  });
+
+  test('quotes a root export name that is not a valid identifier', () => {
+    const output = emitGeneratedModule({
+      rootExport: { kind: 'named', name: 'app-config' },
+      rootName: 'AppConfig',
+      typeImport: '../config.js',
+      fields,
+      compiledDefaults: {},
+      fingerprint: 'f'.repeat(64),
+    });
+
+    expect(output).toContain(
+      "import type { 'app-config' as TypespunConfig } from '../config.js';",
+    );
+  });
 });
