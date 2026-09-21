@@ -14,8 +14,16 @@ runtime package.
 [![license](https://img.shields.io/npm/l/typespun-codegen.svg)](LICENSE)
 
 The package name is `typespun-codegen`; its direct executable is
-`typespun-codegen`. There is no supported programmatic compiler API in version
-0.1.
+`typespun-codegen`. The CLI and the generated module are the supported
+interfaces. The package root also exports the analyze → fingerprint → emit
+pipeline (`analyzeProgram`, `emitGeneratedModule`, `createFingerprint`) for
+tooling such as the playground, but that surface is experimental, outside
+semantic versioning while the package is on 0.x, and may change in any
+release.
+
+**[Try it in the browser](https://omkar273.github.io/typespun/)** — the
+playground runs this analyzer and emitter client-side, so you can see the
+generated loader for any declaration without installing anything.
 
 ## Start with `init`
 

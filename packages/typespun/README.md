@@ -11,6 +11,10 @@ for TypeScript. Schema analysis and the CLI are shipped separately in
 [![npm](https://img.shields.io/npm/v/typespun.svg)](https://www.npmjs.com/package/typespun)
 [![license](https://img.shields.io/npm/l/typespun.svg)](LICENSE)
 
+**[Try it in the browser](https://omkar273.github.io/typespun/)** — edit an
+interface and watch the generated loader, the resolved schema, and a live
+`loadConfig()` run update as you type.
+
 ## Get started
 
 Install the runtime and the development-only generator:
@@ -58,7 +62,7 @@ bun run config:generate
 Application code imports the generated `Config` type and `loadConfig()`:
 
 ```ts
-import { ConfigError } from 'typespun';
+import { ConfigError, formatConfigError } from 'typespun';
 import { loadConfig, type Config } from './generated/typespun.js';
 
 try {
@@ -74,8 +78,9 @@ try {
 
   console.log(config.server.port); // 4000, typed as number
 } catch (error) {
-  if (error instanceof ConfigError) console.error(error.issues);
-  else throw error;
+  if (!(error instanceof ConfigError)) throw error;
+  console.error(formatConfigError(error));
+  process.exit(1);
 }
 ```
 
@@ -83,7 +88,8 @@ Run `bun run config:check` in CI. It does not write files and exits nonzero when
 the committed loader is missing or stale.
 
 For npm, install with `npm install typespun` and `npm install --save-dev
-typespun-codegen`. The runtime supports Bun 1.4.1+ and Node.js 22 or 24.
+typespun-codegen`. The runtime supports Bun 1.4.1+ and Node.js 22 or newer;
+CI exercises the packed packages on Node.js 22, 24, and 26.
 
 ## Resolution and failures
 
@@ -109,7 +115,10 @@ committed, so do not put secrets in them.
 ## Public imports
 
 - `typespun` exports `Config`, `Default`, `Env`, `Ignore`, `Key`, and `Secret`
-  decorators plus `ConfigError` and `ConfigIssue`.
+  decorators plus `ConfigError`, `ConfigIssue`, and `formatConfigError`.
+- `typespun/schema` exports the schema types and `validateTypedValue`. It has
+  no Node built-ins, so tooling that runs the analyzer in a browser can import
+  it without pulling in the runtime resolver.
 - `typespun/generated` exports the versioned runtime ABI used by generated
   files: `createLoader`, `resolveConfig`, `validateTypedValue`, and its schema
   and loader option types. Application code should normally import the
