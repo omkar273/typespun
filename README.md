@@ -4,7 +4,7 @@
 
 # Typespun — typed configuration for TypeScript
 
-> Declare configuration once in TypeScript. Generate the validated loader.
+> Your config, typed and validated. From one TypeScript interface.
 
 [![npm: typespun](https://img.shields.io/npm/v/typespun.svg?label=typespun)](https://www.npmjs.com/package/typespun)
 [![npm downloads](https://img.shields.io/npm/dm/typespun.svg?label=downloads)](https://www.npmjs.com/package/typespun)
@@ -13,13 +13,13 @@
 [![Node.js: 22+](https://img.shields.io/badge/Node.js-%E2%89%A5%2022-B45309.svg)](package.json)
 [![Bun: 1.4.1+](https://img.shields.io/badge/Bun-1.4.1%2B-D97706.svg)](package.json)
 
-![Typespun — declare configuration once, then generate the loader](docs/assets/typespun-social-card.png)
+![Typespun — typed configuration for TypeScript, from one interface](docs/assets/typespun-social-card.png)
 
-A configuration field is usually described three times — as a TypeScript type, as
-`process.env` parsing, and as a runtime validation schema — and the three drift.
-Typespun makes one TypeScript declaration the build-time source of truth and emits
-a deterministic, committable loader that resolves sources in a fixed order and
-validates every field at startup. Fields marked secret omit their received values
+Stop describing every setting three times: a TypeScript type, `process.env`
+parsing, and a runtime schema. The three drift. Write one interface instead, and
+Typespun generates a deterministic, committable loader that reads your env vars,
+dotenv files and defaults in a fixed order, checks every field at startup, and
+fails with one aggregated error. Fields marked secret omit their received values
 from Typespun's own diagnostics.
 
 ## Install
