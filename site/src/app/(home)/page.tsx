@@ -192,7 +192,7 @@ pnpm add --save-dev typespun-codegen`}
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <div className="min-w-0">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-fd-muted-foreground">
-              <span className="inline-block size-1.5 rounded-full bg-brand-amber" />
+              <span className="inline-block size-1.5 rounded-full bg-fd-muted-foreground" />
               Hand-rolled
             </h3>
             <DynamicCodeBlock lang="ts" code={BEFORE} />
@@ -277,11 +277,11 @@ pnpm add --save-dev typespun-codegen`}
 
       {/* ----------------------------------------------------------------- Why */}
       <section className="mx-auto w-full max-w-5xl px-4 py-14 sm:py-20">
-        <Eyebrow>What you get, and what you give up</Eyebrow>
+        <Eyebrow>What you get</Eyebrow>
         <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">
-          A deliberately small model
+          Small surface, fewer surprises
         </h2>
-        <div className="mt-8 grid gap-6 sm:grid-cols-2">
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
           <div className="rounded-xl border border-fd-border bg-fd-card p-5">
             <h3 className="font-display font-medium">One declaration</h3>
             <p className="mt-2 text-sm text-fd-muted-foreground">
@@ -308,15 +308,17 @@ pnpm add --save-dev typespun-codegen`}
               encryption, and no protection from your application&apos;s logs.
             </p>
           </div>
-          <div className="rounded-xl border border-fd-border bg-fd-card p-5">
-            <h3 className="font-display font-medium">When not to use it</h3>
-            <p className="mt-2 text-sm text-fd-muted-foreground">
-              If you need custom transforms, dynamic or runtime-fetched schemas,
-              async secret providers, or a broad validation ecosystem, use a
-              schema library instead. Typespun asks you to accept a build step,
-              committed output and a narrow type model.
-            </p>
-          </div>
+        </div>
+        <div className="mt-6 rounded-xl border border-dashed border-fd-border p-5 sm:flex sm:items-baseline sm:gap-6">
+          <h3 className="shrink-0 font-display font-medium">
+            When not to use it
+          </h3>
+          <p className="mt-2 text-sm text-fd-muted-foreground sm:mt-0">
+            If you need custom transforms, dynamic or runtime-fetched schemas,
+            async secret providers, or a broad validation ecosystem, use a
+            schema library instead. Typespun asks you to accept a build step,
+            committed output and a narrow type model.
+          </p>
         </div>
       </section>
 
@@ -325,11 +327,12 @@ pnpm add --save-dev typespun-codegen`}
         <div className="mx-auto w-full max-w-5xl px-4 py-14 sm:py-20">
           <Eyebrow>Check it yourself</Eyebrow>
           <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">
-            Typespun is new. Here is everything to verify it with.
+            New, so we show our work.
           </h2>
           <p className="mt-3 max-w-2xl text-fd-muted-foreground">
-            It is pre-1.0 with very little adoption. There are no case studies
-            and no logos to show you — only the things you can read and run.
+            Typespun is pre-1.0 and young, so there are no case studies or
+            logos here. Everything below is something you can read and run
+            yourself.
           </p>
           <div className="mt-8 grid gap-px overflow-hidden rounded-xl border border-fd-border bg-fd-border sm:grid-cols-2">
             {PROOF.map((item) => (
@@ -352,20 +355,26 @@ pnpm add --save-dev typespun-codegen`}
 
       {/* ------------------------------------------------------------- Footer CTA */}
       <section className="border-t border-fd-border bg-fd-muted/40">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-12 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-14 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-display text-xl font-semibold">
-              Still deciding?
+            <h2 className="font-display text-2xl font-semibold">
+              Stop maintaining three copies of your config.
             </h2>
             <p className="mt-1 text-sm text-fd-muted-foreground">
-              The comparison page says plainly where Typespun loses.
+              Not sure it fits?{' '}
+              <Link
+                href="/compare"
+                className="underline underline-offset-4 decoration-fd-border hover:decoration-current"
+              >
+                The comparison page says plainly where Typespun loses.
+              </Link>
             </p>
           </div>
           <Link
-            href="/compare"
-            className="self-start rounded-md border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent sm:self-auto"
+            href="/playground"
+            className="self-start rounded-md bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90 sm:self-auto"
           >
-            Compare the alternatives
+            Open the playground
           </Link>
         </div>
       </section>
