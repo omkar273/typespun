@@ -1,0 +1,137 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/preset.css';
+
+/*
+  Typespun palette, taken from the existing brand assets in `docs/assets`:
+  ink #132238, muted #53657A, border #C8D2DF, paper #F6F9FB,
+  teal #2D8C91, blue #4D6FBF, amber #D8A33C, navy #0E2039.
+*/
+@theme {
+  --color-brand-ink: #132238;
+  --color-brand-paper: #f6f9fb;
+  --color-brand-teal: #2d8c91;
+  --color-brand-teal-bright: #4fb3b8;
+  --color-brand-blue: #4d6fbf;
+  --color-brand-blue-bright: #7d9bea;
+  --color-brand-amber: #d8a33c;
+  --color-brand-navy: #0e2039;
+
+  --color-fd-background: #f6f9fb;
+  --color-fd-foreground: #132238;
+  --color-fd-muted: #edf2f8;
+  --color-fd-muted-foreground: #53657a;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #132238;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #132238;
+  --color-fd-border: #d6e0ea;
+  --color-fd-primary: #1c6f74;
+  --color-fd-primary-foreground: #f6f9fb;
+  --color-fd-secondary: #e9eff6;
+  --color-fd-secondary-foreground: #132238;
+  --color-fd-accent: #e2ebf4;
+  --color-fd-accent-foreground: #132238;
+  --color-fd-ring: #2d8c91;
+  --color-fd-overlay: rgba(19, 34, 56, 0.3);
+
+  --font-display:
+    var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Status and diff colors consumed by the Fumadocs preset. */
+@theme static {
+  --color-fd-info: oklch(62.3% 0.214 259.815);
+  --color-fd-warning: oklch(76.9% 0.188 70.08);
+  --color-fd-error: oklch(63.7% 0.237 25.331);
+  --color-fd-success: oklch(72.3% 0.219 149.579);
+  --color-fd-idea: oklch(70.5% 0.209 60.849);
+  --color-fd-diff-remove: rgba(200, 10, 100, 0.12);
+  --color-fd-diff-remove-symbol: rgb(230, 10, 100);
+  --color-fd-diff-add: rgba(14, 180, 100, 0.1);
+  --color-fd-diff-add-symbol: rgb(10, 200, 100);
+}
+
+.dark {
+  --color-fd-background: #0a1524;
+  --color-fd-foreground: #e6edf5;
+  --color-fd-muted: #13223a;
+  --color-fd-muted-foreground: #93a5bd;
+  --color-fd-popover: #0e1c2f;
+  --color-fd-popover-foreground: #e6edf5;
+  --color-fd-card: #0e1c2f;
+  --color-fd-card-foreground: #e6edf5;
+  --color-fd-border: #1e3350;
+  --color-fd-primary: #55b8bd;
+  --color-fd-primary-foreground: #06111e;
+  --color-fd-secondary: #13223a;
+  --color-fd-secondary-foreground: #e6edf5;
+  --color-fd-accent: #17294353;
+  --color-fd-accent-foreground: #e6edf5;
+  --color-fd-ring: #4fb3b8;
+  --color-fd-overlay: rgba(4, 10, 18, 0.55);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+}
+
+/* A hairline grid used behind the hero and section dividers. */
+.ts-grid {
+  background-image:
+    linear-gradient(to right, var(--color-fd-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-fd-border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+/*
+  The brand diagrams in `public/*.svg` are drawn on a light paper background.
+  Frame them so they read as deliberate figures in dark mode instead of
+  glowing white rectangles.
+*/
+.ts-figure {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-brand-paper);
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
+.ts-figure img {
+  margin: 0;
+  width: 100%;
+  border-radius: 0.5rem;
+}
+
+/* The tagline belongs in the top navbar, not in the narrow docs sidebar. */
+#nd-sidebar .ts-tagline {
+  display: none;
+}

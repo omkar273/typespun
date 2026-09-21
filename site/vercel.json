@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "bun install",
+  "buildCommand": "bun run build",
+  "headers": [
+    {
+      "source": "/(.*)\\.svg",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/typespun-social-card.png",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+        }
+      ]
+    }
+  ]
+}

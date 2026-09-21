@@ -1,0 +1,56 @@
+---
+title: Runtime API
+description: The symbols exported from the typespun runtime package — ConfigError and ConfigIssue — with their exact shapes and the meaning of every issue field.
+---
+
+Consumer-facing runtime symbols are imported from `typespun`.
+
+## `ConfigError`
+
+```ts
+class ConfigError extends Error {
+  readonly issues: readonly ConfigIssue[];
+  constructor(issues: readonly ConfigIssue[]);
+}
+```
+
+Thrown synchronously by a generated loader when any source read, override, or
+field validation issue exists. `name` is `ConfigError`; `message` is
+`Configuration validation failed`. Inspect `issues` for details.
+
+```ts
+import { ConfigError } from 'typespun';
+
+try {
+  loadConfig();
+} catch (error) {
+  if (error instanceof ConfigError) console.error(error.issues);
+}
+```
+
+## `ConfigIssue`
+
+```ts
+interface ConfigIssue {
+  readonly code:
+    | 'missing_value'
+    | 'invalid_value'
+    | 'unknown_override'
+    | 'source_read_failed'
+    | 'incompatible_schema';
+  readonly path: string;
+  readonly source?: string;
+  readonly envKey?: string;
+  readonly message: string;
+  readonly received?: unknown;
+}
+```
+
+`path` is a dot-separated configuration path. `source` identifies the selected
+candidate or failing source. `envKey` is present for field-source failures.
+`received` can appear for non-secret invalid values and is omitted for secret
+fields.
+
+The generated loader's options and return type are documented in
+[generated loader](/docs/reference/generated-loader). Decorators are documented
+separately because they are compile-time markers, not runtime validators.

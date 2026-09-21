@@ -1,0 +1,5 @@
+{
+  "title": "Reference",
+  "defaultOpen": true,
+  "pages": ["runtime", "generated-loader", "cli", "annotations", "configuration"]
+}
