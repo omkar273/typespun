@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1100" height="430" viewBox="0 0 1100 430" role="img" aria-labelledby="title desc">
   <title id="title">Typespun source precedence</title>
   <desc id="desc">Five layers rise from inline defaults through compiled defaults, dotenv files, environment source, and typed overrides. The highest defined value wins.</desc>
-  <defs><style>.bg{fill:#f6f9fb}.s{stroke:#132238;stroke-width:2}.a{fill:#e8f4f3}.b{fill:#eaf0fc}.c{fill:#fff}.h{font:700 22px ui-sans-serif,system-ui,sans-serif;fill:#132238}.t{font:500 16px ui-sans-serif,system-ui,sans-serif;fill:#53657a}.n{font:700 15px ui-monospace,SFMono-Regular,monospace;fill:#132238}</style></defs>
+  <defs><style>.bg{fill:#faf9f7}.s{stroke:#1c1917;stroke-width:2}.a{fill:#fdf1dd}.b{fill:#f3ede4}.c{fill:#fff}.h{font:700 22px ui-sans-serif,system-ui,sans-serif;fill:#1c1917}.t{font:500 16px ui-sans-serif,system-ui,sans-serif;fill:#6b6259}.n{font:700 15px ui-monospace,SFMono-Regular,monospace;fill:#1c1917}</style></defs>
   <rect class="bg" width="1100" height="430" rx="24"/>
   <text x="60" y="52" class="h">Highest defined value wins</text>
   <g class="s">

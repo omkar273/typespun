@@ -2,7 +2,7 @@
   <title id="title">Typespun architecture</title>
   <desc id="desc">The Typespun CLI analyzes a TypeScript declaration, project configuration, TypeScript configuration, and optional defaults to emit a generated loader. At runtime the loader combines defaults, dotenv, an environment source, and typed overrides, then returns typed configuration or a ConfigError.</desc>
   <defs><style>
-    .bg{fill:#f6f9fb}.panel{fill:#fff;stroke:#c8d2df;stroke-width:2}.strong{fill:#132238}.muted{fill:#53657a}.teal{stroke:#2d8c91}.blue{stroke:#4d6fbf}.line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.dash{stroke-dasharray:7 7}.h{font:700 24px ui-sans-serif,system-ui,sans-serif}.t{font:500 17px ui-sans-serif,system-ui,sans-serif}.m{font:600 15px ui-monospace,SFMono-Regular,monospace}
+    .bg{fill:#faf9f7}.panel{fill:#fff;stroke:#d6d0c8;stroke-width:2}.strong{fill:#1c1917}.muted{fill:#6b6259}.teal{stroke:#b45309}.blue{stroke:#d97706}.line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.dash{stroke-dasharray:7 7}.h{font:700 24px ui-sans-serif,system-ui,sans-serif}.t{font:500 17px ui-sans-serif,system-ui,sans-serif}.m{font:600 15px ui-monospace,SFMono-Regular,monospace}
   </style></defs>
   <rect class="bg" width="1200" height="560" rx="24"/>
   <text x="54" y="55" class="h strong">Build time</text>
@@ -11,12 +11,12 @@
   <rect x="50" y="273" width="250" height="70" rx="12" class="panel"/><text x="75" y="316" class="m strong">tsconfig.json</text>
   <rect x="50" y="361" width="250" height="82" rx="12" class="panel"/><text x="75" y="396" class="m strong">defaults.json | yaml</text><text x="75" y="422" class="t muted">optional</text>
   <path d="M300 126C355 126 362 248 405 248M300 220H405M300 308C355 308 362 248 405 248M300 402C355 402 362 248 405 248" class="line teal"/>
-  <rect x="405" y="165" width="270" height="166" rx="16" fill="#132238"/><text x="440" y="218" class="h" fill="#fff">typespun CLI</text><text x="440" y="252" class="t" fill="#dbe4ee">static analysis</text><text x="440" y="281" class="t" fill="#dbe4ee">defaults validation</text><text x="440" y="310" class="t" fill="#dbe4ee">stable fingerprint</text>
+  <rect x="405" y="165" width="270" height="166" rx="16" fill="#1c1917"/><text x="440" y="218" class="h" fill="#fff">typespun CLI</text><text x="440" y="252" class="t" fill="#e7e2dc">static analysis</text><text x="440" y="281" class="t" fill="#e7e2dc">defaults validation</text><text x="440" y="310" class="t" fill="#e7e2dc">stable fingerprint</text>
   <path d="M675 248H750" class="line blue"/><path d="M737 237l13 11-13 11" class="line blue"/>
   <rect x="750" y="165" width="400" height="166" rx="16" class="panel"/><text x="785" y="215" class="m strong">src/generated/typespun.ts</text><text x="785" y="250" class="t muted">Config type alias</text><text x="785" y="281" class="t muted">serializable schema + compiled defaults</text><text x="785" y="312" class="t muted">loadConfig()</text>
   <path d="M950 331V388" class="line blue"/><path d="M939 375l11 13 11-13" class="line blue"/>
   <text x="54" y="515" class="h strong">Runtime</text>
   <rect x="405" y="405" width="270" height="105" rx="16" class="panel"/><text x="440" y="446" class="m strong">resolution sources</text><text x="440" y="478" class="t muted">defaults · dotenv · env · overrides</text>
   <path d="M675 458H750" class="line teal"/><path d="M737 447l13 11-13 11" class="line teal"/>
-  <rect x="750" y="405" width="400" height="105" rx="16" fill="#e8f4f3" stroke="#2d8c91" stroke-width="2"/><text x="785" y="447" class="m strong">Config</text><text x="785" y="478" class="t muted">or aggregated ConfigError</text>
+  <rect x="750" y="405" width="400" height="105" rx="16" fill="#fdf1dd" stroke="#b45309" stroke-width="2"/><text x="785" y="447" class="m strong">Config</text><text x="785" y="478" class="t muted">or aggregated ConfigError</text>
 </svg>
