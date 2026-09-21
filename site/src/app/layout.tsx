@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: `%s — ${appName}`,
   },
   description:
-    'Declare configuration once in TypeScript and generate a validated, committable loader with explicit source precedence and secret-aware diagnostics.',
+    'Write one TypeScript interface and generate a committed loader that reads env vars, dotenv files and defaults in a fixed order, validates every field at startup, and keeps secrets out of error output.',
   applicationName: appName,
   alternates: { canonical: siteUrl },
   openGraph: {

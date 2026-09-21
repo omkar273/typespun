@@ -84,16 +84,6 @@ generator version. `typespun check` never writes and exits nonzero when output
 is stale, so configuration drift fails the build instead of production. See
 [generated code](/docs/concepts/generated-code).
 
-## Approach comparison
-
-| Approach                                                | Source of truth                                       | Runtime dependency | Main strength                                                                                    | Main cost                                                                                |
-| ------------------------------------------------------- | ----------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **Typespun**                                            | The TypeScript declaration, plus a generated artifact | a small runtime    | Interface or class drives a reviewable loader with fixed precedence and secret-aware diagnostics | Requires a codegen step, committed output, and a deliberately narrow type/source model   |
-| Schema-first runtime validation (Zod, Valibot, ArkType) | The runtime schema                                    | a schema library   | Rich validation, transforms, huge ecosystem, Standard Schema                                     | The TS type is derived from or kept in sync with the schema; the schema ships to runtime |
-| Manual `process.env` parsing                            | Your code                                             | none               | Total control, no tooling                                                                        | You maintain parsing, coercion, aggregation, and precedence forever                      |
-| Config-file libraries (node-config, convict)            | Config files                                          | the library        | Mature layering across environments                                                              | Weak or manual TypeScript typing; values often typed `any`                               |
-| TypeScript types alone                                  | The type declaration                                  | none               | Zero ceremony                                                                                    | Types vanish at runtime, so external values are never actually checked                   |
-
 ## The landscape
 
 For context on the category Typespun is entering. Adoption figures were read
