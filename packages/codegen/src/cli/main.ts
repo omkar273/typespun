@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { generateProject } from '../generate.js';
 import { formatDiagnostic } from './diagnostics.js';
 import { initializeProject, type InitOptions } from './init.js';
@@ -10,6 +11,7 @@ Commands:
   check      Check that generated output is current
 
 Options:
+  -v, --version           Show the installed version
   -h, --help              Show help
 
 Init options:
@@ -23,6 +25,22 @@ Generate/check options:
   --config <path>
 `;
 
+const PACKAGE_JSON_URL = new URL('../../package.json', import.meta.url);
+
+function packageVersion(): string {
+  const manifest: unknown = JSON.parse(readFileSync(PACKAGE_JSON_URL, 'utf8'));
+  if (
+    typeof manifest !== 'object' ||
+    manifest === null ||
+    !('version' in manifest) ||
+    typeof manifest.version !== 'string' ||
+    manifest.version.length === 0
+  ) {
+    throw new Error('typespun package version is missing');
+  }
+  return manifest.version;
+}
+
 interface CliStreams {
   readonly stdout: { write(value: string): unknown; readonly isTTY?: boolean };
   readonly stderr: { write(value: string): unknown; readonly isTTY?: boolean };
@@ -35,6 +53,10 @@ export async function runCli(
   streams: CliStreams = process,
   cwd = process.cwd(),
 ): Promise<number> {
+  if (args[0] === '--version' || args[0] === '-v') {
+    streams.stdout.write(`${packageVersion()}\n`);
+    return 0;
+  }
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     streams.stdout.write(HELP);
     return 0;
