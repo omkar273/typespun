@@ -21,6 +21,9 @@ function Footer() {
           <Link href="/compare" className="hover:text-fd-foreground">
             Compare
           </Link>
+          <Link href="/blog" className="hover:text-fd-foreground">
+            Blog
+          </Link>
           <Link href="/playground" className="hover:text-fd-foreground">
             Playground
           </Link>
