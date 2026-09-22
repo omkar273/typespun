@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { InlineTOC } from 'fumadocs-ui/components/inline-toc';
 import { getMDXComponents } from '@/components/mdx';
+import { Eyebrow } from '@/components/eyebrow';
 import { JsonLd } from '@/components/json-ld';
 import { pagesSource } from '@/lib/source';
 import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
@@ -28,9 +29,7 @@ export default function Page() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
       <JsonLd data={softwareApplicationJsonLd} />
-      <p className="font-display text-[13px] font-medium uppercase tracking-[0.12em] text-brand-accent dark:text-brand-accent-bright">
-        Comparison
-      </p>
+      <Eyebrow>Comparison</Eyebrow>
       <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
         {page.data.title}
       </h1>
