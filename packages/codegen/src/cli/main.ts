@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { generateProject } from '../generate.js';
 import { formatDiagnostic } from './diagnostics.js';
 import { initializeProject, type InitOptions } from './init.js';
+
+const PACKAGE_JSON_URL = new URL('../../package.json', import.meta.url);
 
 const HELP = `Usage: typespun <command> [options]
 
@@ -10,6 +13,7 @@ Commands:
   check      Check that generated output is current
 
 Options:
+  -v, --version           Show version
   -h, --help              Show help
 
 Init options:
@@ -30,10 +34,27 @@ interface CliStreams {
 
 class UsageError extends Error {}
 
+export function getPackageVersion(
+  packageJsonUrl: URL = PACKAGE_JSON_URL,
+): string {
+  const manifest: unknown = JSON.parse(readFileSync(packageJsonUrl, 'utf8'));
+  if (
+    typeof manifest !== 'object' ||
+    manifest === null ||
+    !('version' in manifest) ||
+    typeof manifest.version !== 'string' ||
+    manifest.version.length === 0
+  ) {
+    throw new Error('typespun-codegen package version is missing');
+  }
+  return manifest.version;
+}
+
 export async function runCli(
   args: readonly string[],
   streams: CliStreams = process,
   cwd = process.cwd(),
+  packageJsonUrl: URL = PACKAGE_JSON_URL,
 ): Promise<number> {
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     streams.stdout.write(HELP);
@@ -41,6 +62,11 @@ export async function runCli(
   }
 
   try {
+    if (args[0] === '--version' || args[0] === '-v') {
+      streams.stdout.write(`${getPackageVersion(packageJsonUrl)}\n`);
+      return 0;
+    }
+
     const [command, ...commandArgs] = args;
     if (command === 'generate' || command === 'check') {
       if (isHelpOnly(commandArgs)) {

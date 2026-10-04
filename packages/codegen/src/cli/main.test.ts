@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   captureStreams,
   createBareProject,
@@ -49,7 +50,41 @@ describe('runCli usage', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Usage: typespun');
+    expect(result.stdout).toContain('-v, --version');
     expect(result.stderr).toBe('');
+  });
+
+  test.each([[['--version']], [['-v']]])(
+    'prints version and exits zero for %j',
+    async (args: string[]) => {
+      const result = await invoke(process.cwd(), args);
+
+      expect(result.exitCode).toBe(0);
+      const packageJson = JSON.parse(
+        await readFile(join(import.meta.dirname, '../../package.json'), 'utf8'),
+      );
+      expect(result.stdout).toBe(`${packageJson.version}\n`);
+      expect(result.stderr).toBe('');
+    },
+  );
+
+  test('reports when package version is missing', async () => {
+    const project = await createBareProject();
+    const manifestPath = join(project, 'missing-version-package.json');
+    await writeFile(manifestPath, '{}');
+
+    const captured = captureStreams(false);
+    const exitCode = await runCli(
+      ['--version'],
+      captured.streams,
+      process.cwd(),
+      pathToFileURL(manifestPath),
+    );
+
+    expect(exitCode).toBe(1);
+    expect(captured.stderr()).toContain(
+      'typespun: typespun-codegen package version is missing',
+    );
   });
 
   test('rejects an unknown command with usage guidance', async () => {
