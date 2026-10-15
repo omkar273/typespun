@@ -41,20 +41,23 @@ afterEach(async () => {
   await removeTemporaryDirectories();
 });
 
-async function init(
+const init = async (
   cwd: string,
   ...args: readonly string[]
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
   const captured = captureStreams();
-  const exitCode = await runCli(['init', ...args], captured.streams, cwd);
+  const exitCode = await runCli(['init', ...args], {
+    streams: captured.streams,
+    cwd,
+  });
   return { exitCode, stdout: captured.stdout(), stderr: captured.stderr() };
-}
+};
 
-function parseJsonWithComments(text: string): unknown {
+const parseJsonWithComments = (text: string): unknown => {
   const parsed = ts.parseConfigFileTextToJson('typespun.json', text);
   if (parsed.error !== undefined) throw new Error('invalid test JSON');
   return parsed.config;
-}
+};
 
 describe('init scaffolding', () => {
   test('creates a full interface project and generates once dependencies resolve', async () => {
@@ -64,9 +67,9 @@ describe('init scaffolding', () => {
     const result = await init(project);
 
     expect(result.exitCode).toBe(0);
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
-      interfaceTemplate,
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(interfaceTemplate);
     const configText = await readFile(join(project, 'typespun.json'), 'utf8');
     expect(parseJsonWithComments(configText)).toEqual({
       input: 'src/config.ts',
@@ -75,24 +78,23 @@ describe('init scaffolding', () => {
     expect(configText).toContain('// "envPrefix": "APP",');
     expect(configText).toContain('// "tsconfig": "tsconfig.json",');
     expect(configText).toContain('// "secretDefaults": "warn"');
-    expect(await readFile(join(project, 'config.yaml'), 'utf8')).toBe(
+    await expect(readFile(join(project, 'config.yaml'), 'utf8')).resolves.toBe(
       'port: 3000\n',
     );
-    expect(
-      JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).scripts,
-    ).toEqual({
+    const packageText = await readFile(join(project, 'package.json'), 'utf8');
+    expect(JSON.parse(packageText)).toHaveProperty('scripts', {
       'config:check': 'typespun check',
       'config:generate': 'typespun generate',
     });
-    expect(
-      await readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
-    ).toContain('export const loadConfig');
+    await expect(
+      readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
+    ).resolves.toContain('export const loadConfig');
   });
 
   test('is idempotent: a rerun leaves every file byte-identical', async () => {
     const project = await createBareProject();
     await linkWorkspaceDependencies(project);
-    expect((await init(project)).exitCode).toBe(0);
+    await expect(init(project)).resolves.toMatchObject({ exitCode: 0 });
     const paths = [
       'src/config.ts',
       'typespun.json',
@@ -104,13 +106,11 @@ describe('init scaffolding', () => {
       paths.map((path) => readFile(join(project, path), 'utf8')),
     );
 
-    expect((await init(project)).exitCode).toBe(0);
+    await expect(init(project)).resolves.toMatchObject({ exitCode: 0 });
 
-    expect(
-      await Promise.all(
-        paths.map((path) => readFile(join(project, path), 'utf8')),
-      ),
-    ).toEqual(before);
+    await expect(
+      Promise.all(paths.map((path) => readFile(join(project, path), 'utf8'))),
+    ).resolves.toEqual(before);
   });
 
   test('keeps an existing conventional defaults file instead of creating config.yaml', async () => {
@@ -122,7 +122,7 @@ describe('init scaffolding', () => {
 
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(project, 'config.yaml'))).toBe(false);
-    expect(await readFile(join(project, 'config.yml'), 'utf8')).toBe(
+    await expect(readFile(join(project, 'config.yml'), 'utf8')).resolves.toBe(
       'port: 4000\n',
     );
     const configText = await readFile(join(project, 'typespun.json'), 'utf8');
@@ -148,14 +148,11 @@ describe('init scaffolding', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(await readFile(join(project, 'config/app.mts'), 'utf8')).toContain(
-      '@Config()\nexport class AppConfig',
-    );
-    expect(
-      parseJsonWithComments(
-        await readFile(join(project, 'typespun.json'), 'utf8'),
-      ),
-    ).toEqual({
+    await expect(
+      readFile(join(project, 'config/app.mts'), 'utf8'),
+    ).resolves.toContain('@Config()\nexport class AppConfig');
+    const configText = await readFile(join(project, 'typespun.json'), 'utf8');
+    expect(parseJsonWithComments(configText)).toEqual({
       input: 'config/app.mts',
       output: 'config/generated.mts',
       envPrefix: 'APP_',
@@ -168,14 +165,13 @@ describe('init scaffolding', () => {
     });
     await writeProjectFile(project, 'src/config.ts', validInterface);
 
-    expect((await init(project)).exitCode).toBe(0);
+    await expect(init(project)).resolves.toMatchObject({ exitCode: 0 });
 
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
-      validInterface,
-    );
-    expect(
-      JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).scripts,
-    ).toEqual({
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(validInterface);
+    const packageText = await readFile(join(project, 'package.json'), 'utf8');
+    expect(JSON.parse(packageText)).toHaveProperty('scripts', {
       'config:generate': 'custom-command',
       test: 'vitest run',
       'config:check': 'typespun check',
@@ -197,9 +193,8 @@ describe('init scaffolding', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(
-      JSON.parse(await readFile(join(project, 'typespun.json'), 'utf8')),
-    ).toEqual({
+    const configText = await readFile(join(project, 'typespun.json'), 'utf8');
+    expect(JSON.parse(configText)).toEqual({
       input: 'settings/app.ts',
       output: 'settings/generated.ts',
       envPrefix: 'APP',
@@ -219,15 +214,14 @@ describe('init scaffolding', () => {
     const result = await init(project);
 
     expect(result.exitCode).toBe(0);
-    expect(
-      JSON.parse(await readFile(join(project, 'typespun.json'), 'utf8')),
-    ).toMatchObject({ envPrefix: 'EXISTING' });
+    const configText = await readFile(join(project, 'typespun.json'), 'utf8');
+    expect(JSON.parse(configText)).toMatchObject({ envPrefix: 'EXISTING' });
   });
 
   test('adopts an output file that Typespun itself generated', async () => {
     const project = await createBareProject();
     await linkWorkspaceDependencies(project);
-    expect((await init(project)).exitCode).toBe(0);
+    await expect(init(project)).resolves.toMatchObject({ exitCode: 0 });
     const generated = await readFile(
       join(project, 'src/generated/typespun.ts'),
       'utf8',
@@ -237,9 +231,9 @@ describe('init scaffolding', () => {
     const result = await init(project);
 
     expect(result.exitCode).toBe(0);
-    expect(
-      await readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
-    ).toBe(generated);
+    await expect(
+      readFile(join(project, 'src/generated/typespun.ts'), 'utf8'),
+    ).resolves.toBe(generated);
   });
 
   test('finds dependencies hoisted to an ancestor node_modules', async () => {
@@ -298,7 +292,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('conflicts');
-    expect(await readFile(join(project, 'typespun.json'), 'utf8')).toBe(before);
+    await expect(
+      readFile(join(project, 'typespun.json'), 'utf8'),
+    ).resolves.toBe(before);
   });
 
   test('rejects an unusable existing config before changing anything', async () => {
@@ -314,7 +310,7 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('Unknown typespun.json key: unknown');
-    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+    await expect(readFile(join(project, 'package.json'), 'utf8')).resolves.toBe(
       packageBefore,
     );
     expect(existsSync(join(project, 'src/config.ts'))).toBe(false);
@@ -334,10 +330,10 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('refuses to overwrite');
-    expect(await readFile(outputPath, 'utf8')).toBe(
+    await expect(readFile(outputPath, 'utf8')).resolves.toBe(
       '// belongs to the application\n',
     );
-    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+    await expect(readFile(join(project, 'package.json'), 'utf8')).resolves.toBe(
       packageBefore,
     );
     expect(existsSync(join(project, 'typespun.json'))).toBe(false);
@@ -361,7 +357,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('refuses to overwrite');
-    expect(await readFile(outputPath, 'utf8')).toBe('// application module\n');
+    await expect(readFile(outputPath, 'utf8')).resolves.toBe(
+      '// application module\n',
+    );
   });
 
   test('rejects an output that aliases the schema through a symlink', async () => {
@@ -381,9 +379,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('must differ');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
-      validInterface,
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(validInterface);
   });
 
   test('preserves a dangling generated-output symlink', async () => {
@@ -396,8 +394,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('refuses to overwrite');
-    expect((await lstat(outputPath)).isSymbolicLink()).toBe(true);
-    expect(await readlink(outputPath)).toBe('../missing-generated.ts');
+    const outputEntry = await lstat(outputPath);
+    expect(outputEntry.isSymbolicLink()).toBe(true);
+    await expect(readlink(outputPath)).resolves.toBe('../missing-generated.ts');
     expect(existsSync(join(project, 'typespun.json'))).toBe(false);
     expect(existsSync(join(project, 'src/config.ts'))).toBe(false);
   });
@@ -411,7 +410,8 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('symbolic link');
-    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+    const configEntry = await lstat(configPath);
+    expect(configEntry.isSymbolicLink()).toBe(true);
     expect(existsSync(join(project, 'src/config.ts'))).toBe(false);
     expect(existsSync(join(project, 'config.yaml'))).toBe(false);
   });
@@ -429,7 +429,7 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('symbolic link');
-    expect(await readFile(target, 'utf8')).toBe(contents);
+    await expect(readFile(target, 'utf8')).resolves.toBe(contents);
     expect(existsSync(join(project, 'src/config.ts'))).toBe(false);
   });
 
@@ -445,9 +445,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('must differ');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
-      validInterface,
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(validInterface);
   });
 
   test('rejects a requested style that contradicts the existing schema', async () => {
@@ -457,9 +457,9 @@ describe('init refusals leave the project untouched', () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('--style class conflicts');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
-      validInterface,
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(validInterface);
   });
 
   test('requires an explicit input when several conventional schemas exist', async () => {
@@ -511,7 +511,7 @@ describe('init refusals leave the project untouched', () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('tsconfig.json');
     expect(existsSync(join(project, 'src/config.ts'))).toBe(false);
-    expect(await readFile(join(project, 'package.json'), 'utf8')).toBe(
+    await expect(readFile(join(project, 'package.json'), 'utf8')).resolves.toBe(
       packageBefore,
     );
   });
@@ -640,25 +640,71 @@ describe('init manifest validation', () => {
 });
 
 describe('init dependency guidance', () => {
-  test.each([
-    ['bun', { packageManager: 'bun@1.4.1' }, [], 'bun add typespun'],
-    ['npm', { packageManager: 'npm@10.0.0' }, [], 'npm install typespun'],
-    ['yarn', { packageManager: 'yarn@4.0.0' }, [], 'yarn add typespun'],
-    ['pnpm', { packageManager: 'pnpm@10.0.0' }, [], 'pnpm add typespun'],
-    ['a bun lockfile', {}, ['bun.lock'], 'bun add typespun'],
-    ['a legacy bun lockfile', {}, ['bun.lockb'], 'bun add typespun'],
-    ['a pnpm lockfile', {}, ['pnpm-lock.yaml'], 'pnpm add typespun'],
-    ['a yarn lockfile', {}, ['yarn.lock'], 'yarn add typespun'],
-    ['no signal at all', {}, [], 'npm install typespun'],
+  test.each<{
+    name: string;
+    packageFields: Record<string, unknown>;
+    lockfiles: string[];
+    expected: string;
+  }>([
+    {
+      name: 'bun',
+      packageFields: { packageManager: 'bun@1.4.1' },
+      lockfiles: [],
+      expected: 'bun add typespun',
+    },
+    {
+      name: 'npm',
+      packageFields: { packageManager: 'npm@10.0.0' },
+      lockfiles: [],
+      expected: 'npm install typespun',
+    },
+    {
+      name: 'yarn',
+      packageFields: { packageManager: 'yarn@4.0.0' },
+      lockfiles: [],
+      expected: 'yarn add typespun',
+    },
+    {
+      name: 'pnpm',
+      packageFields: { packageManager: 'pnpm@10.0.0' },
+      lockfiles: [],
+      expected: 'pnpm add typespun',
+    },
+    {
+      name: 'a bun lockfile',
+      packageFields: {},
+      lockfiles: ['bun.lock'],
+      expected: 'bun add typespun',
+    },
+    {
+      name: 'a legacy bun lockfile',
+      packageFields: {},
+      lockfiles: ['bun.lockb'],
+      expected: 'bun add typespun',
+    },
+    {
+      name: 'a pnpm lockfile',
+      packageFields: {},
+      lockfiles: ['pnpm-lock.yaml'],
+      expected: 'pnpm add typespun',
+    },
+    {
+      name: 'a yarn lockfile',
+      packageFields: {},
+      lockfiles: ['yarn.lock'],
+      expected: 'yarn add typespun',
+    },
+    {
+      name: 'no signal at all',
+      packageFields: {},
+      lockfiles: [],
+      expected: 'npm install typespun',
+    },
   ])(
-    'reports install commands for %s',
-    async (
-      _name,
-      packageFields: Record<string, unknown>,
-      lockfiles: string[],
-      expected: string,
-    ) => {
+    'reports install commands for $name',
+    async ({ packageFields, lockfiles, expected }) => {
       const project = await createBareProject(packageFields);
+
       for (const lockfile of lockfiles) {
         await writeProjectFile(project, lockfile, '');
       }

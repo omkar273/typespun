@@ -22,8 +22,8 @@
     "config:generate": "bun run --filter 'typespun-example-*' config:generate",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --type-aware --max-warnings 0 --report-unused-disable-directives-severity error",
+    "lint:fix": "oxlint --type-aware --max-warnings 0 --report-unused-disable-directives-severity error --fix",
     "test": "bun run build && bun run test:unit && bun run test:package",
     "test:coverage": "bun run build && vitest run --coverage",
     "test:package": "vitest run tests/",
@@ -33,8 +33,10 @@
   "devDependencies": {
     "@types/bun": "1.4.2",
     "@vitest/coverage-v8": "5.0.3",
+    "es-toolkit": "1.52.0",
     "oxfmt": "0.67.0",
     "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
     "vitest": "5.0.1"

@@ -15,22 +15,43 @@ afterEach(() => {
   }
 });
 
-function createProject(): string {
+const createProject = (): string => {
   const directory = mkdtempSync(join(tmpdir(), 'typespun-project-'));
   temporaryDirectories.push(directory);
   return directory;
-}
+};
 
-function writeProjectFile(
+const writeProjectFile = (
   projectDirectory: string,
   relativePath: string,
   contents = '',
-): string {
+): string => {
   const path = join(projectDirectory, relativePath);
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, contents);
   return path;
-}
+};
+
+const withConfig = (contents: string): string => {
+  const directory = createProject();
+  writeProjectFile(directory, 'src/config.ts', '');
+  writeProjectFile(directory, 'tsconfig.json', '{}');
+  writeProjectFile(directory, 'typespun.json', contents);
+  return directory;
+};
+
+const unsafeField = (overrides: Partial<FieldIR> = {}): FieldIR => ({
+  propertyPath: ['__proto__', 'polluted'],
+  defaultsPath: ['server', 'host'],
+  envName: 'APP_HOST',
+  kind: { type: 'string' },
+  required: true,
+  secret: false,
+  hasDefault: false,
+  optionalParents: [],
+  location: { file: 'config.ts', line: 1, column: 1 },
+  ...overrides,
+});
 
 describe('project discovery', () => {
   test('finds the sole conventional TypeScript input without a config file', () => {
@@ -381,6 +402,7 @@ describe('compiled defaults', () => {
       });
       expect(result.warnings).toHaveLength(warningCount);
       expect(result.errors).toHaveLength(errorCount);
+
       for (const diagnostic of [...result.warnings, ...result.errors]) {
         expect(diagnostic.path).toBe('server.unsupported');
         expect(JSON.stringify(diagnostic)).not.toContain('true');
@@ -440,30 +462,37 @@ describe('compiled defaults', () => {
     expect(JSON.stringify(result.errors)).not.toContain('invalid-port');
     expect(JSON.stringify(result.errors)).not.toContain('99');
   });
+});
 
+describe('compiled secret defaults', () => {
   test.each([
-    [
-      'warn',
-      1,
-      0,
-      {
+    {
+      secretDefaults: 'warn',
+      warningCount: 1,
+      errorCount: 0,
+      expectedValues: {
         server: { host: 'localhost', port: 3000 },
         credentials: { token: 'shh' },
       },
-    ],
-    [
-      'allow',
-      0,
-      0,
-      {
+    },
+    {
+      secretDefaults: 'allow',
+      warningCount: 0,
+      errorCount: 0,
+      expectedValues: {
         server: { host: 'localhost', port: 3000 },
         credentials: { token: 'shh' },
       },
-    ],
-    ['error', 0, 1, { server: { host: 'localhost', port: 3000 } }],
+    },
+    {
+      secretDefaults: 'error',
+      warningCount: 0,
+      errorCount: 1,
+      expectedValues: { server: { host: 'localhost', port: 3000 } },
+    },
   ] as const)(
-    'applies the %s secret-default policy',
-    (secretDefaults, warningCount, errorCount, expectedValues) => {
+    'applies the $secretDefaults secret-default policy',
+    ({ secretDefaults, warningCount, errorCount, expectedValues }) => {
       const result = compileDefaults(
         { path: 'config.json', content: '{"credentials":{"token":"shh"}}' },
         fields,
@@ -473,6 +502,7 @@ describe('compiled defaults', () => {
       expect(result.values).toEqual(expectedValues);
       expect(result.warnings).toHaveLength(warningCount);
       expect(result.errors).toHaveLength(errorCount);
+
       for (const diagnostic of [...result.warnings, ...result.errors]) {
         expect(diagnostic.path).toBe('credentials.token');
         expect(JSON.stringify(diagnostic)).not.toContain('shh');
@@ -481,28 +511,33 @@ describe('compiled defaults', () => {
   );
 
   test.each([
-    [
-      'warn',
-      1,
-      0,
-      {
+    {
+      secretDefaults: 'warn',
+      warningCount: 1,
+      errorCount: 0,
+      expectedValues: {
         server: { host: 'localhost', port: 3000 },
         credentials: { token: 'inline-secret' },
       },
-    ],
-    [
-      'allow',
-      0,
-      0,
-      {
+    },
+    {
+      secretDefaults: 'allow',
+      warningCount: 0,
+      errorCount: 0,
+      expectedValues: {
         server: { host: 'localhost', port: 3000 },
         credentials: { token: 'inline-secret' },
       },
-    ],
-    ['error', 0, 1, { server: { host: 'localhost', port: 3000 } }],
+    },
+    {
+      secretDefaults: 'error',
+      warningCount: 0,
+      errorCount: 1,
+      expectedValues: { server: { host: 'localhost', port: 3000 } },
+    },
   ] as const)(
-    'applies the %s secret-default policy to inline defaults',
-    (secretDefaults, warningCount, errorCount, expectedValues) => {
+    'applies the $secretDefaults secret-default policy to inline defaults',
+    ({ secretDefaults, warningCount, errorCount, expectedValues }) => {
       const inlineSecretFields = fields.map((field) =>
         field.secret
           ? { ...field, hasDefault: true, defaultValue: 'inline-secret' }
@@ -517,6 +552,7 @@ describe('compiled defaults', () => {
       expect(result.values).toEqual(expectedValues);
       expect(result.warnings).toHaveLength(warningCount);
       expect(result.errors).toHaveLength(errorCount);
+
       for (const diagnostic of [...result.warnings, ...result.errors]) {
         expect(diagnostic).toMatchObject({
           code: 'secret_default',
@@ -592,7 +628,9 @@ describe('compiled defaults', () => {
       'supplied-private-never-print',
     );
   });
+});
 
+describe('compiled defaults key safety', () => {
   test.each(['__proto__', 'constructor', 'prototype'] as const)(
     'rejects prototype-pollution defaults key %s',
     (key) => {
@@ -606,7 +644,8 @@ describe('compiled defaults', () => {
       expect(result.values).toEqual({
         server: { host: 'localhost', port: 3000 },
       });
-      expect(({} as { token?: string }).token).toBeUndefined();
+      const probe: { token?: string } = {};
+      expect(probe.token).toBeUndefined();
     },
   );
 
@@ -750,21 +789,6 @@ d: [*c,*c,*c,*c,*c]
 describe('compiled defaults path safety', () => {
   const policies = { unknownKeys: 'error', secretDefaults: 'allow' } as const;
 
-  function unsafeField(overrides: Partial<FieldIR> = {}): FieldIR {
-    return {
-      propertyPath: ['__proto__', 'polluted'],
-      defaultsPath: ['server', 'host'],
-      envName: 'APP_HOST',
-      kind: { type: 'string' },
-      required: true,
-      secret: false,
-      hasDefault: false,
-      optionalParents: [],
-      location: { file: 'config.ts', line: 1, column: 1 },
-      ...overrides,
-    } as FieldIR;
-  }
-
   test('refuses a compiled default whose property path is unsafe', () => {
     const result = compileDefaults(
       { path: 'config.yaml', content: 'server:\n  host: evil\n' },
@@ -779,7 +803,8 @@ describe('compiled defaults path safety', () => {
       }),
     ]);
     expect(Object.hasOwn(result.values, 'polluted')).toBe(false);
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
   });
 
   test('refuses an inline default whose property path is unsafe', () => {
@@ -792,7 +817,8 @@ describe('compiled defaults path safety', () => {
     expect(result.errors).toEqual([
       expect.objectContaining({ code: 'unsafe_defaults_key' }),
     ]);
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
   });
 
   test('clones object inline defaults and drops dangerous keys from them', () => {
@@ -801,7 +827,7 @@ describe('compiled defaults path safety', () => {
     const defaultValue: unknown = JSON.parse(
       '{"host":"localhost","nested":{"deep":[1,2]},"__proto__":{"polluted":true}}',
     );
-    const objectField = {
+    const objectField: FieldIR = {
       propertyPath: ['server'],
       defaultsPath: ['server'],
       envName: 'APP_SERVER',
@@ -812,7 +838,7 @@ describe('compiled defaults path safety', () => {
       defaultValue,
       optionalParents: [],
       location: { file: 'config.ts', line: 1, column: 1 },
-    } as unknown as FieldIR;
+    };
 
     const result = compileDefaults(
       { path: 'config.json', content: '{}' },
@@ -824,22 +850,15 @@ describe('compiled defaults path safety', () => {
     expect(result.values).toEqual({
       server: { host: 'localhost', nested: { deep: [1, 2] } },
     });
-    expect(Object.hasOwn(result.values['server'] as object, '__proto__')).toBe(
-      false,
+    expect(Object.getOwnPropertyNames(result.values['server'])).not.toContain(
+      '__proto__',
     );
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
   });
 });
 
 describe('project configuration rejections', () => {
-  function withConfig(contents: string): string {
-    const directory = createProject();
-    writeProjectFile(directory, 'src/config.ts', '');
-    writeProjectFile(directory, 'tsconfig.json', '{}');
-    writeProjectFile(directory, 'typespun.json', contents);
-    return directory;
-  }
-
   test('requires a tsconfig above the resolved input', () => {
     const directory = createProject();
     writeProjectFile(directory, 'src/config.ts', '');

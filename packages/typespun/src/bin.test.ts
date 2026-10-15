@@ -20,27 +20,30 @@ afterEach(async () => {
   );
 });
 
-async function makeDirectory(): Promise<string> {
+const makeDirectory = async (): Promise<string> => {
   const path = await mkdtemp(join(tmpdir(), 'typespun-shim-'));
   temporaryDirectories.push(path);
   return path;
-}
+};
 
 /** A stand-in code generator that reports how it was invoked. */
-async function installFakeCodegen(root: string, exitCode = 0): Promise<void> {
+const installFakeCodegen = async (
+  root: string,
+  exitCode = 0,
+): Promise<void> => {
   const directory = join(root, 'node_modules/typespun-codegen/dist');
   await mkdir(directory, { recursive: true });
   await writeFile(
     join(directory, 'bin.js'),
     `console.log(JSON.stringify(process.argv.slice(2)));\nprocess.exitCode = ${exitCode};\n`,
   );
-}
+};
 
-function runShim(
+const runShim = (
   cwd: string,
   args: readonly string[],
   env: Record<string, string | undefined> = process.env,
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
   const child = spawn(process.execPath, [shimPath, ...args], {
     cwd,
     env,
@@ -62,7 +65,7 @@ function runShim(
       resolve({ exitCode: code ?? 1, stdout, stderr }),
     );
   });
-}
+};
 
 describe('typespun shim', () => {
   test('runs a code generator installed in the working directory', async () => {
@@ -95,7 +98,9 @@ describe('typespun shim', () => {
     const project = await makeDirectory();
     await installFakeCodegen(project, 2);
 
-    expect((await runShim(project, ['check'])).exitCode).toBe(2);
+    const result = await runShim(project, ['check']);
+
+    expect(result.exitCode).toBe(2);
   });
 
   test('reports installation guidance when nothing can run the CLI', async () => {

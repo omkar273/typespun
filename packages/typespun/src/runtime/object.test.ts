@@ -4,6 +4,7 @@ import {
   formatPath,
   getOwnPath,
   hasUnsafePathSegment,
+  nullPrototypeRecord,
   setOwnPath,
 } from './object.js';
 
@@ -14,9 +15,9 @@ describe('path helpers', () => {
     [['a', 'constructor'], true],
     [['a', 'prototype', 'b'], true],
     [[], false],
-  ])('detects unsafe segments in %j', (path, expected) => {
-    expect(hasUnsafePathSegment(path)).toBe(expected);
-  });
+  ])('detects unsafe segments in %j', (path, expected) =>
+    expect(hasUnsafePathSegment(path)).toBe(expected),
+  );
 
   test('joins a path for display', () => {
     expect(formatPath(['server', 'port'])).toBe('server.port');
@@ -43,14 +44,27 @@ describe('getOwnPath', () => {
     ['a non-object on the way', { server: 'nope' }, ['server', 'port']],
     ['a primitive root', 'nope', ['server']],
     ['an inherited property', {}, ['toString']],
-  ])('reports %s as not found', (_name, value, path) => {
-    expect(getOwnPath(value, path)).toEqual({ found: false });
+  ])('reports %s as not found', (_name, value, path) =>
+    expect(getOwnPath(value, path)).toEqual({ found: false }),
+  );
+});
+
+describe('nullPrototypeRecord', () => {
+  test('copies own values into a record without a prototype', () => {
+    const values = Object.fromEntries([
+      ['__proto__', 'x'],
+      ['port', '1'],
+    ]);
+    const record = nullPrototypeRecord(values);
+
+    expect(Object.getPrototypeOf(record)).toBeNull();
+    expect(Object.keys(record)).toEqual(['__proto__', 'port']);
   });
 });
 
 describe('setOwnPath', () => {
   test('creates missing intermediate containers without a prototype', () => {
-    const target: Record<string, unknown> = Object.create(null);
+    const target = nullPrototypeRecord<unknown>();
 
     expect(setOwnPath(target, ['server', 'tls', 'port'], 8443)).toBe(true);
 
@@ -73,12 +87,14 @@ describe('setOwnPath', () => {
     ['an unsafe segment', ['__proto__', 'polluted']],
     ['an unsafe leaf', ['server', 'constructor']],
   ])('refuses %s', (_name, path) => {
-    const target: Record<string, unknown> = Object.create(null);
+    const target = nullPrototypeRecord<unknown>();
 
     expect(setOwnPath(target, path, 'value')).toBe(false);
 
+    const plain: Record<string, unknown> = {};
+
     expect(Object.keys(target)).toEqual([]);
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(plain['polluted']).toBeUndefined();
   });
 
   test('refuses to descend through a non-object value', () => {
@@ -119,12 +135,13 @@ describe('collectOverrideEntries', () => {
   test('ignores undefined leaves and the root itself', () => {
     expect(collectOverrideEntries({ port: undefined })).toEqual([]);
     expect(collectOverrideEntries({})).toEqual([]);
-    expect(collectOverrideEntries(undefined)).toEqual([]);
+    expect(collectOverrideEntries()).toEqual([]);
   });
 
   test('reports a cycle instead of recursing forever', () => {
-    const cyclic: Record<string, unknown> = { server: {} };
-    (cyclic['server'] as Record<string, unknown>)['self'] = cyclic;
+    const server: Record<string, unknown> = {};
+    const cyclic = { server };
+    server['self'] = cyclic;
 
     expect(collectOverrideEntries(cyclic)).toEqual([
       { path: ['server', 'self'], value: undefined, kind: 'cycle' },

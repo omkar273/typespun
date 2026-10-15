@@ -1,27 +1,15 @@
 type InertDecorator = (...args: readonly unknown[]) => undefined;
 
-const inertDecorator: InertDecorator = () => undefined;
+const inertDecorator: InertDecorator = () => {};
 
-export function Config(): InertDecorator {
-  return inertDecorator;
-}
+export const Config = (): InertDecorator => inertDecorator;
 
-export function Default(_value: unknown): InertDecorator {
-  return inertDecorator;
-}
+export const Default = (_value: unknown): InertDecorator => inertDecorator;
 
-export function Env(_name: string): InertDecorator {
-  return inertDecorator;
-}
+export const Env = (_name: string): InertDecorator => inertDecorator;
 
-export function Ignore(): InertDecorator {
-  return inertDecorator;
-}
+export const Ignore = (): InertDecorator => inertDecorator;
 
-export function Key(_name: string): InertDecorator {
-  return inertDecorator;
-}
+export const Key = (_name: string): InertDecorator => inertDecorator;
 
-export function Secret(): InertDecorator {
-  return inertDecorator;
-}
+export const Secret = (): InertDecorator => inertDecorator;

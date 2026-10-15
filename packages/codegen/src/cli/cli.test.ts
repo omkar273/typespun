@@ -27,11 +27,11 @@ interface CliRun {
   readonly stderr: string;
 }
 
-function runBinary(
+const runBinary = (
   cwd: string,
   args: readonly string[],
   options: { env?: Record<string, string | undefined> } = {},
-): Promise<CliRun> {
+): Promise<CliRun> => {
   const child = spawn(process.execPath, [binPath, ...args], {
     cwd,
     env: options.env ?? { ...process.env, NO_COLOR: '1' },
@@ -54,18 +54,18 @@ function runBinary(
       resolve({ exitCode: code ?? 1, stdout, stderr }),
     );
   });
-}
+};
 
 /**
  * Answers prompts one at a time. `promptLine` builds a fresh readline
  * interface per question, so the whole script cannot be piped up front: each
  * answer is written only once its prompt has actually been printed.
  */
-function runBinaryInteractive(
+const runBinaryInteractive = (
   cwd: string,
   args: readonly string[],
   dialogue: readonly { readonly prompt: string; readonly answer: string }[],
-): Promise<CliRun> {
+): Promise<CliRun> => {
   const child = spawn(process.execPath, [binPath, ...args], {
     cwd,
     env: { ...process.env, NO_COLOR: '1' },
@@ -87,6 +87,7 @@ function runBinaryInteractive(
     const next = remaining[0];
     if (next === undefined) return;
     const occurrences = stdout.split(next.prompt).length - 1;
+
     if (occurrences > seen) {
       seen = 0;
       remaining = remaining.slice(1);
@@ -102,7 +103,7 @@ function runBinaryInteractive(
       resolve({ exitCode: code ?? 1, stdout, stderr });
     });
   });
-}
+};
 
 describe('published binary', () => {
   test('prints help and exits zero', async () => {
@@ -119,13 +120,13 @@ describe('published binary', () => {
       const result = await runBinary(process.cwd(), args);
 
       expect(result.exitCode).toBe(0);
-      const packageJson = JSON.parse(
-        await readFile(
-          join(import.meta.dirname, '..', '..', 'package.json'),
-          'utf8',
-        ),
+      const manifestText = await readFile(
+        join(import.meta.dirname, '..', '..', 'package.json'),
+        'utf8',
       );
-      expect(result.stdout).toBe(`${packageJson.version}\n`);
+      const manifest: unknown = JSON.parse(manifestText);
+      expect(result.stdout).toMatch(/^[^\n]+\n$/u);
+      expect(manifest).toHaveProperty('version', result.stdout.slice(0, -1));
       expect(result.stderr).toBe('');
     },
   );
@@ -148,8 +149,12 @@ export interface AppConfig { createdAt: Date }
 `);
     const usable = await createProject();
 
-    expect((await runBinary(broken, ['generate'])).exitCode).toBe(1);
-    expect((await runBinary(usable, ['wat'])).exitCode).toBe(2);
+    await expect(runBinary(broken, ['generate'])).resolves.toMatchObject({
+      exitCode: 1,
+    });
+    await expect(runBinary(usable, ['wat'])).resolves.toMatchObject({
+      exitCode: 2,
+    });
   });
 
   test('scaffolds and generates a project end to end', async () => {
@@ -177,12 +182,12 @@ export interface AppConfig { createdAt: Date }
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toContain('Please answer "interface" or "class"');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toContain(
-      '@Config()\nexport class AppConfig',
-    );
-    expect(await readFile(join(project, 'typespun.json'), 'utf8')).toContain(
-      '"envPrefix": "APP"',
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toContain('@Config()\nexport class AppConfig');
+    await expect(
+      readFile(join(project, 'typespun.json'), 'utf8'),
+    ).resolves.toContain('"envPrefix": "APP"');
   });
 
   test('accepts empty interactive answers as the defaults', async () => {
@@ -198,12 +203,12 @@ export interface AppConfig { createdAt: Date }
     );
 
     expect(result.exitCode).toBe(0);
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toContain(
-      'export interface AppConfig',
-    );
-    expect(await readFile(join(project, 'typespun.json'), 'utf8')).toContain(
-      '// "envPrefix": "APP",',
-    );
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toContain('export interface AppConfig');
+    await expect(
+      readFile(join(project, 'typespun.json'), 'utf8'),
+    ).resolves.toContain('// "envPrefix": "APP",');
   });
 
   test('prints package-manager commands without executing an installer', async () => {

@@ -1,37 +1,826 @@
 import ts from 'typescript';
-import type { FieldKind } from 'typespun/schema';
-import { validateTypedValue } from 'typespun/schema';
+import { validateTypedValue, type FieldKind } from 'typespun/schema';
 import type {
   AnalyzeResult,
   Diagnostic,
   FieldIR,
   RootExport,
 } from '../contracts.js';
-import { readAnnotations, typespunSymbols } from './annotations.js';
+import {
+  readAnnotations,
+  resolveAlias,
+  typespunSymbols,
+  type AnnotationContext,
+  type Annotations,
+} from './annotations.js';
 import { locationOf, sortDiagnostics } from './diagnostic.js';
 import { evaluateDefault } from './default-expression.js';
 
-function isJavaScriptSource(node: ts.Node): boolean {
-  return /\.(?:[cm]?js|jsx)$/i.test(node.getSourceFile().fileName);
+/** State shared by every step of one `analyzeProgram` run. */
+interface Analysis extends AnnotationContext {
+  readonly program: ts.Program;
+  readonly envPrefix: string;
+  readonly diagnostics: Diagnostic[];
+  readonly fields: FieldIR[];
+  readonly invalidMembers: Set<ts.Node>;
+  readonly validatedHeritage: Set<ts.Declaration>;
+  readonly activeTypes: Set<ts.Type>;
+  readonly activeProperties: Set<ts.Node>;
+  readonly envNames: Set<string>;
+  readonly defaultsPaths: Set<string>;
 }
 
-export function analyzeProgram(
+/** Where a visited type sits in the schema. */
+interface Scope {
+  readonly propertyPath: string[];
+  readonly defaultsPath: string[];
+  readonly optionalParents: string[][];
+  readonly secret: boolean;
+  readonly parentDefault?: unknown;
+}
+
+type RootDeclaration = (ts.InterfaceDeclaration | ts.ClassDeclaration) & {
+  readonly name: ts.Identifier;
+};
+
+type DataProperty = ts.PropertySignature | ts.PropertyDeclaration;
+
+interface PropertyInput {
+  readonly node: DataProperty;
+  readonly name: string;
+  readonly annotations: Annotations;
+  readonly scope: Scope;
+}
+
+interface FieldInput {
+  readonly node: DataProperty;
+  readonly annotations: Annotations;
+  readonly scope: Scope;
+  readonly type: ts.Type;
+  readonly path: string[];
+  readonly defaultsPath: string[];
+  readonly optional: boolean;
+}
+
+type ArrayElement = Extract<FieldKind, { type: 'array' }>['element'];
+
+const UNSAFE_NAMES = ['__proto__', 'constructor', 'prototype'];
+
+const ARRAY_ELEMENTS: readonly string[] = [
+  'string',
+  'number',
+  'boolean',
+] satisfies ArrayElement[];
+
+const HIDDEN_CLASS_MODIFIERS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.StaticKeyword,
+  ts.SyntaxKind.PrivateKeyword,
+  ts.SyntaxKind.ProtectedKeyword,
+]);
+
+const HIDDEN_MODIFIER_FLAGS =
+  ts.ModifierFlags.Private |
+  ts.ModifierFlags.Protected |
+  ts.ModifierFlags.Static;
+
+const isJavaScriptSource = (node: ts.Node): boolean =>
+  /\.(?:[cm]?js|jsx)$/i.test(node.getSourceFile().fileName);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isDefaultsObject = (value: unknown): value is Record<string, unknown> =>
+  isRecord(value) && !Array.isArray(value);
+
+const isArrayElement = (type: string): type is ArrayElement =>
+  ARRAY_ELEMENTS.includes(type);
+
+const hasTypeFlag = (type: ts.Type, flag: ts.TypeFlags): boolean =>
+  (type.flags & flag) !== 0;
+
+// `Type.symbol` is typed as present but is undefined for primitive types.
+const declarationsOf = (type: ts.Type): ts.Declaration[] =>
+  type.getSymbol()?.declarations ?? [];
+
+const referencedSymbol = (node: ts.Node, checker: ts.TypeChecker) => {
+  const symbol = checker.getSymbolAtLocation(node);
+  return symbol === undefined ? symbol : resolveAlias(symbol, checker);
+};
+
+// `isArrayType` is true only for references to `Array` or `ReadonlyArray`.
+const isArrayReference = (
+  type: ts.Type,
+  checker: ts.TypeChecker,
+): type is ts.TypeReference => checker.isArrayType(type);
+
+const mergeInlineDefaults = (lower: unknown, upper: unknown): unknown => {
+  if (!isDefaultsObject(lower) || !isDefaultsObject(upper)) return upper;
+  return Object.fromEntries(
+    [...new Set([...Object.keys(lower), ...Object.keys(upper)])].map((key) => [
+      key,
+      Object.hasOwn(upper, key)
+        ? mergeInlineDefaults(lower[key], upper[key])
+        : lower[key],
+    ]),
+  );
+};
+
+const containsIntersection = (
+  node: ts.TypeNode | ts.ExpressionWithTypeArguments | undefined,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>(),
+): boolean => {
+  if (node === undefined) return false;
+  if (ts.isIntersectionTypeNode(node)) return true;
+  if (ts.isParenthesizedTypeNode(node))
+    return containsIntersection(node.type, checker, seen);
+  if (!ts.isTypeReferenceNode(node) && !ts.isExpressionWithTypeArguments(node))
+    return false;
+
+  const symbol = referencedSymbol(
+    ts.isTypeReferenceNode(node) ? node.typeName : node.expression,
+    checker,
+  );
+  if (symbol === undefined || seen.has(symbol)) return false;
+  seen.add(symbol);
+  return (
+    symbol.declarations?.some(
+      (declaration) =>
+        ts.isTypeAliasDeclaration(declaration) &&
+        containsIntersection(declaration.type, checker, seen),
+    ) ?? false
+  );
+};
+
+const hasConditionalType = (
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>(),
+): boolean => {
+  if (ts.isConditionalTypeNode(node)) return true;
+
+  if (ts.isTypeReferenceNode(node)) {
+    const symbol = referencedSymbol(node.typeName, checker);
+
+    if (symbol !== undefined && !seen.has(symbol)) {
+      seen.add(symbol);
+      const aliasesConditional = symbol.declarations?.some(
+        (declaration) =>
+          ts.isTypeAliasDeclaration(declaration) &&
+          hasConditionalType(declaration.type, checker, seen),
+      );
+      if (aliasesConditional === true) return true;
+    }
+  }
+
+  return (
+    ts.forEachChild(
+      node,
+      (child) => hasConditionalType(child, checker, seen) || undefined,
+    ) ?? false
+  );
+};
+
+const canChangeShape = (
+  node: DataProperty,
+  checker: ts.TypeChecker,
+): boolean => {
+  if (node.type !== undefined && hasConditionalType(node.type, checker))
+    return true;
+
+  for (
+    let parent: ts.Node = node.parent;
+    !ts.isSourceFile(parent);
+    parent = parent.parent
+  ) {
+    if (ts.isConditionalTypeNode(parent)) return true;
+  }
+
+  return false;
+};
+
+const arrayKindOf = (
+  type: ts.TypeReference,
+  checker: ts.TypeChecker,
+): FieldKind | undefined => {
+  const [element] = checker.getTypeArguments(type);
+  const kind = element === undefined ? element : kindOf(element, checker);
+
+  if (kind === undefined || !isArrayElement(kind.type)) return undefined;
+  return { type: 'array', element: kind.type };
+};
+
+const kindOf = (
+  type: ts.Type,
+  checker: ts.TypeChecker,
+): FieldKind | undefined => {
+  if (hasTypeFlag(type, ts.TypeFlags.String)) return { type: 'string' };
+  if (hasTypeFlag(type, ts.TypeFlags.Number)) return { type: 'number' };
+  if (hasTypeFlag(type, ts.TypeFlags.Boolean)) return { type: 'boolean' };
+  if (type.isStringLiteral()) return { type: 'enum', values: [type.value] };
+
+  if (type.isUnion()) {
+    const values = type.types.flatMap((item) =>
+      item.isStringLiteral() ? [item.value] : [],
+    );
+    if (values.length === type.types.length) return { type: 'enum', values };
+  }
+
+  return isArrayReference(type, checker)
+    ? arrayKindOf(type, checker)
+    : undefined;
+};
+
+const isObjectShape = (
+  type: ts.Type,
+  { program, checker }: Analysis,
+): boolean =>
+  hasTypeFlag(type, ts.TypeFlags.Object) &&
+  !checker.isArrayType(type) &&
+  !checker.isTupleType(type) &&
+  checker.getIndexInfosOfType(type).length === 0 &&
+  type.getCallSignatures().length === 0 &&
+  type.getConstructSignatures().length === 0 &&
+  !declarationsOf(type).some((declaration) =>
+    program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+  );
+
+const validateHeritage = (type: ts.Type, analysis: Analysis): void => {
+  const declarations = declarationsOf(type);
+  const javaScriptDeclaration = declarations.find(isJavaScriptSource);
+
+  if (javaScriptDeclaration !== undefined) {
+    analysis.report(
+      'javascript_schema',
+      'JavaScript schema declarations are not supported.',
+      javaScriptDeclaration,
+    );
+    return;
+  }
+
+  for (const declaration of declarations) {
+    if (!ts.isInterfaceDeclaration(declaration)) continue;
+    if (analysis.validatedHeritage.has(declaration)) continue;
+    analysis.validatedHeritage.add(declaration);
+
+    for (const clause of declaration.heritageClauses ?? []) {
+      for (const base of clause.types) validateHeritageBase(base, analysis);
+    }
+  }
+};
+
+const validateHeritageBase = (
+  base: ts.ExpressionWithTypeArguments,
+  analysis: Analysis,
+): void => {
+  if (containsIntersection(base, analysis.checker)) {
+    analysis.report(
+      'unsupported_type',
+      'Intersections are not supported in heritage.',
+      base,
+    );
+  } else {
+    validateHeritage(analysis.checker.getTypeAtLocation(base), analysis);
+  }
+};
+
+const isPublicDataMember = (member: ts.ClassElement): boolean => {
+  if (!ts.isPropertyDeclaration(member)) return false;
+  if (ts.isPrivateIdentifier(member.name)) return false;
+  return !(
+    member.modifiers?.some((modifier) =>
+      HIDDEN_CLASS_MODIFIERS.has(modifier.kind),
+    ) ?? false
+  );
+};
+
+const isHiddenClassProperty = (node: DataProperty): boolean => {
+  if (!ts.isPropertyDeclaration(node)) return false;
+  return (
+    ts.isPrivateIdentifier(node.name) ||
+    (ts.getCombinedModifierFlags(node) & HIDDEN_MODIFIER_FLAGS) !== 0
+  );
+};
+
+const isUnsafeKey = (key: string | undefined): boolean => {
+  if (key === undefined) return false;
+  return key === '' || key.includes('.') || UNSAFE_NAMES.includes(key);
+};
+
+const toEnvSegment = (part: string): string =>
+  part
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toUpperCase();
+
+const defaultEnvName = (path: string[], envPrefix: string): string => {
+  const snake = path.map(toEnvSegment).join('_');
+  const prefix = envPrefix.replace(/_+$/, '');
+  return prefix === '' ? snake : `${prefix}_${snake}`;
+};
+
+const findRoots = (
+  source: ts.SourceFile,
+  moduleExports: ts.Symbol[],
+  analysis: Analysis,
+): RootDeclaration[] => {
+  const { checker } = analysis;
+  const exportedSymbols = new Set<ts.Symbol | undefined>(
+    moduleExports.map((symbol) => resolveAlias(symbol, checker)),
+  );
+
+  const isMarkedRoot = (node: ts.Statement): node is RootDeclaration => {
+    const isDeclaration =
+      ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node);
+    if (!isDeclaration || node.name === undefined) return false;
+    if (!exportedSymbols.has(checker.getSymbolAtLocation(node.name)))
+      return false;
+    return readAnnotations(node, analysis).root;
+  };
+
+  return source.statements.filter(isMarkedRoot);
+};
+
+const rootExportOf = (
+  root: RootDeclaration,
+  moduleExports: ts.Symbol[],
+  checker: ts.TypeChecker,
+): RootExport => {
+  const rootSymbol = checker.getSymbolAtLocation(root.name);
+  const exportNames = moduleExports
+    .filter((symbol) => resolveAlias(symbol, checker) === rootSymbol)
+    .map((symbol) => symbol.name);
+  exportNames.sort();
+  const exportName =
+    exportNames.find((name) => name === root.name.text) ??
+    exportNames.find((name) => name !== 'default') ??
+    'default';
+  return exportName === 'default'
+    ? { kind: 'default' }
+    : { kind: 'named', name: exportName };
+};
+
+/** Reports a root that cannot be analyzed further; returns true if it did. */
+const rejectRoot = (
+  root: RootDeclaration,
+  rootType: ts.Type,
+  analysis: Analysis,
+): boolean => {
+  if ((root.typeParameters?.length ?? 0) > 0) {
+    analysis.report(
+      'generic_schema',
+      'Configuration roots cannot have type parameters.',
+      root.name,
+    );
+    return true;
+  }
+
+  if (declarationsOf(rootType).length > 1) {
+    analysis.report(
+      'declaration_merging',
+      'Configuration roots cannot use declaration merging.',
+      root.name,
+    );
+    return true;
+  }
+
+  return false;
+};
+
+const reportRootMembers = (
+  root: RootDeclaration,
+  rootType: ts.Type,
+  analysis: Analysis,
+): void => {
+  const { checker, report } = analysis;
+
+  for (const index of checker.getIndexInfosOfType(rootType)) {
+    report(
+      'unsupported_type',
+      'Index signatures are not supported.',
+      index.declaration ?? root,
+    );
+  }
+
+  for (const signature of [
+    ...rootType.getCallSignatures(),
+    ...rootType.getConstructSignatures(),
+  ]) {
+    report(
+      'unsupported_type',
+      'Call and construct signatures are not supported.',
+      signature.declaration ?? root,
+    );
+  }
+
+  if (!ts.isClassDeclaration(root)) return;
+
+  for (const heritage of root.heritageClauses ?? [])
+    report(
+      'class_inheritance',
+      'Configuration classes cannot inherit other classes.',
+      heritage,
+    );
+
+  for (const member of root.members) {
+    if (isPublicDataMember(member)) continue;
+    report(
+      'invalid_class_member',
+      'Configuration classes allow only public instance data properties.',
+      member,
+    );
+    analysis.invalidMembers.add(member);
+  }
+};
+
+/** Reports a property that cannot become a field; returns true if it did. */
+const rejectProperty = (
+  { node, name, annotations, scope }: PropertyInput,
+  analysis: Analysis,
+): boolean => {
+  const { report } = analysis;
+
+  if (isHiddenClassProperty(node)) {
+    report(
+      'invalid_class_member',
+      'Configuration classes allow only public instance data properties.',
+      node,
+    );
+    return true;
+  }
+
+  // Generic types can keep producing fresh identities forever, including
+  // inheritance that substitutes a fresh type into a type-parameter field.
+  // Bound that undecidable expansion separately from proven type cycles.
+  if (analysis.activeProperties.has(node) && scope.propertyPath.length >= 128) {
+    report(
+      'schema_too_deep',
+      'Generic type expansion exceeds the supported analysis depth of 128.',
+      node,
+    );
+    return true;
+  }
+
+  if (!ts.isIdentifier(node.name) || UNSAFE_NAMES.includes(name)) {
+    report(
+      'invalid_property',
+      'Properties must use safe identifier names.',
+      node,
+    );
+    return true;
+  }
+
+  if (containsIntersection(node.type, analysis.checker)) {
+    report('unsupported_type', 'Intersections are not supported.', node);
+    return true;
+  }
+
+  if (isUnsafeKey(annotations.key)) {
+    report(
+      'invalid_annotation',
+      'Key must be one nonempty, safe path segment.',
+      node,
+    );
+    return true;
+  }
+
+  if (
+    annotations.env !== undefined &&
+    !/^[A-Za-z_][A-Za-z0-9_]*$/.test(annotations.env)
+  ) {
+    report(
+      'invalid_annotation',
+      'Env must be a valid complete environment name.',
+      node,
+    );
+    return true;
+  }
+
+  return false;
+};
+
+/** Applies initializer and parent defaults; undefined when they are invalid. */
+const withDefaults = (
+  { node, name, annotations, scope }: PropertyInput,
+  analysis: Analysis,
+): Annotations | undefined => {
+  let result = annotations;
+
+  if (ts.isPropertyDeclaration(node) && node.initializer !== undefined) {
+    const value = evaluateDefault(node.initializer, analysis.checker);
+
+    if (!value.ok) {
+      analysis.report(
+        'invalid_default',
+        'Initializers must be supported static values.',
+        node,
+      );
+      return undefined;
+    }
+
+    if (!result.hasDefault)
+      result = { ...result, hasDefault: true, defaultValue: value.value };
+  }
+
+  const { parentDefault } = scope;
+
+  if (isRecord(parentDefault) && Object.hasOwn(parentDefault, name)) {
+    result = {
+      ...result,
+      hasDefault: true,
+      defaultValue: mergeInlineDefaults(
+        result.defaultValue,
+        parentDefault[name],
+      ),
+    };
+  }
+
+  return result;
+};
+
+/** Reports an object default that cannot fill the shape; returns true if it did. */
+const rejectObjectDefault = (
+  { node, annotations, type }: FieldInput,
+  { checker, report }: Analysis,
+): boolean => {
+  if (!annotations.hasDefault) return false;
+  const { defaultValue } = annotations;
+
+  if (!isDefaultsObject(defaultValue)) {
+    report('invalid_default', 'Object fields require object defaults.', node);
+    return true;
+  }
+
+  const hasForeignKey = Object.keys(defaultValue).some(
+    (key) =>
+      UNSAFE_NAMES.includes(key) ||
+      checker.getPropertyOfType(type, key) === undefined,
+  );
+  if (!hasForeignKey) return false;
+  report(
+    'invalid_default',
+    'Object defaults contain unknown or unsafe properties.',
+    node,
+  );
+  return true;
+};
+
+const visitObjectField = (field: FieldInput, analysis: Analysis): void => {
+  const { node, annotations, scope, type } = field;
+  const { checker, report, activeProperties, fields, diagnostics } = analysis;
+  validateHeritage(type, analysis);
+  if (annotations.env !== undefined)
+    report('object_env', 'Env annotations apply only to leaves.', node);
+  const resolvesTypeParameter =
+    node.type !== undefined &&
+    hasTypeFlag(
+      checker.getTypeFromTypeNode(node.type),
+      ts.TypeFlags.TypeParameter,
+    );
+  const repeatsProperty = activeProperties.has(node) && !resolvesTypeParameter;
+  const isRecursive =
+    analysis.activeTypes.has(type) ||
+    (repeatsProperty && !canChangeShape(node, checker));
+
+  if (isRecursive) {
+    report(
+      'recursive_type',
+      'Circular configuration shapes are not supported.',
+      node,
+    );
+    return;
+  }
+
+  if (checker.getPropertiesOfType(type).length === 0) {
+    report(
+      'unsupported_type',
+      'Empty object configuration shapes are not supported.',
+      node,
+    );
+    return;
+  }
+
+  if (rejectObjectDefault(field, analysis)) return;
+
+  const alreadyActive = activeProperties.has(node);
+  activeProperties.add(node);
+  const fieldsBeforeVisit = fields.length;
+  const diagnosticsBeforeVisit = diagnostics.length;
+  visitType(
+    type,
+    {
+      propertyPath: field.path,
+      defaultsPath: field.defaultsPath,
+      optionalParents: field.optional
+        ? [...scope.optionalParents, field.path]
+        : scope.optionalParents,
+      secret: scope.secret || annotations.secret,
+      parentDefault: annotations.defaultValue,
+    },
+    analysis,
+  );
+  if (!alreadyActive) activeProperties.delete(node);
+
+  if (
+    fields.length === fieldsBeforeVisit &&
+    diagnostics.length === diagnosticsBeforeVisit
+  ) {
+    report(
+      'unsupported_type',
+      'Configuration object shapes must contain at least one included leaf.',
+      node,
+    );
+  }
+};
+
+const addLeafField = (
+  field: FieldInput,
+  kind: FieldKind,
+  analysis: Analysis,
+): void => {
+  const { node, annotations, scope } = field;
+
+  if (
+    annotations.hasDefault &&
+    validateTypedValue(kind, annotations.defaultValue) !== undefined
+  ) {
+    analysis.report(
+      'invalid_default',
+      'The inline default does not match its field type.',
+      node,
+    );
+    return;
+  }
+
+  const envName =
+    annotations.env ?? defaultEnvName(field.path, analysis.envPrefix);
+  if (analysis.envNames.has(envName))
+    analysis.report(
+      'duplicate_env',
+      'Multiple fields resolve to the same environment name.',
+      node,
+    );
+  analysis.envNames.add(envName);
+  analysis.fields.push({
+    propertyPath: field.path,
+    defaultsPath: field.defaultsPath,
+    envName,
+    kind,
+    required: !field.optional,
+    secret: scope.secret || annotations.secret,
+    hasDefault: annotations.hasDefault,
+    ...(annotations.hasDefault
+      ? { defaultValue: annotations.defaultValue }
+      : {}),
+    optionalParents: scope.optionalParents,
+    location: locationOf(node),
+  });
+};
+
+const visitDataProperty = (
+  property: ts.Symbol,
+  input: PropertyInput,
+  analysis: Analysis,
+): void => {
+  const { checker, report } = analysis;
+  const { node, name, scope } = input;
+  if (rejectProperty(input, analysis)) return;
+  const annotations = withDefaults(input, analysis);
+  if (annotations === undefined) return;
+
+  const path = [...scope.propertyPath, name];
+  const defaultsPath = [...scope.defaultsPath, annotations.key ?? name];
+  const optional = (property.flags & ts.SymbolFlags.Optional) !== 0;
+  const declaredType = checker.getTypeOfSymbolAtLocation(property, node);
+  const isNullableUnion =
+    declaredType.isUnion() &&
+    declaredType.types.some((item) => hasTypeFlag(item, ts.TypeFlags.Null));
+
+  if (isNullableUnion) {
+    report('unsupported_type', 'Nullable unions are not supported.', node);
+    return;
+  }
+
+  const type = optional
+    ? checker.getNonNullableType(declaredType)
+    : declaredType;
+  const javaScriptDeclaration = declarationsOf(type).find(isJavaScriptSource);
+
+  if (javaScriptDeclaration !== undefined) {
+    report(
+      'javascript_schema',
+      'JavaScript schema declarations are not supported.',
+      javaScriptDeclaration,
+    );
+    return;
+  }
+
+  const kind = kindOf(type, checker);
+  const defaultsKey = JSON.stringify(defaultsPath);
+
+  if (analysis.defaultsPaths.has(defaultsKey)) {
+    report(
+      'duplicate_defaults_path',
+      'Multiple fields resolve to conflicting defaults paths.',
+      node,
+    );
+  }
+
+  analysis.defaultsPaths.add(defaultsKey);
+  const field = {
+    node,
+    annotations,
+    scope,
+    type,
+    path,
+    defaultsPath,
+    optional,
+  };
+
+  if (kind === undefined && isObjectShape(type, analysis)) {
+    visitObjectField(field, analysis);
+    return;
+  }
+
+  if (kind === undefined) {
+    report('unsupported_type', 'This field type is not supported.', node);
+    return;
+  }
+
+  addLeafField(field, kind, analysis);
+};
+
+const visitProperty = (
+  property: ts.Symbol,
+  scope: Scope,
+  analysis: Analysis,
+): void => {
+  const node = property.valueDeclaration ?? property.declarations?.[0];
+  if (node === undefined) return;
+  if (analysis.invalidMembers.has(node)) return;
+
+  if (isJavaScriptSource(node)) {
+    analysis.report(
+      'javascript_schema',
+      'JavaScript schema declarations are not supported.',
+      node,
+    );
+    return;
+  }
+
+  const annotations = readAnnotations(node, analysis);
+  if (annotations.ignore) return;
+  const name = property.getName();
+
+  if (!ts.isPropertySignature(node) && !ts.isPropertyDeclaration(node)) {
+    analysis.report(
+      'unsupported_type',
+      'Only data properties are supported.',
+      node,
+    );
+    return;
+  }
+
+  visitDataProperty(property, { node, name, annotations, scope }, analysis);
+};
+
+const visitType = (type: ts.Type, scope: Scope, analysis: Analysis): void => {
+  analysis.activeTypes.add(type);
+
+  for (const property of analysis.checker.getPropertiesOfType(type))
+    visitProperty(property, scope, analysis);
+
+  analysis.activeTypes.delete(type);
+};
+
+export const analyzeProgram = (
   program: ts.Program,
   inputPath: string,
   envPrefix = '',
-): AnalyzeResult {
+): AnalyzeResult => {
   const checker = program.getTypeChecker();
   const diagnostics: Diagnostic[] = [];
   const fields: FieldIR[] = [];
-  const report = (code: string, message: string, node: ts.Node) =>
-    diagnostics.push({ code, message, location: locationOf(node) });
-  const symbols = typespunSymbols(program);
-  const annotationsFor = (node: ts.Node) =>
-    readAnnotations(node, report, checker, symbols);
+  const analysis: Analysis = {
+    program,
+    checker,
+    envPrefix,
+    diagnostics,
+    fields,
+    report: (code, message, node) =>
+      diagnostics.push({ code, message, location: locationOf(node) }),
+    symbols: typespunSymbols(program),
+    invalidMembers: new Set(),
+    validatedHeritage: new Set(),
+    activeTypes: new Set(),
+    activeProperties: new Set(),
+    envNames: new Set(),
+    defaultsPaths: new Set(),
+  };
   // `getSourceFile` normalises the name and resolves relative paths against the
   // compiler host's current directory, so no `node:path` resolution is needed.
   const source = program.getSourceFile(inputPath);
-  if (!source)
+  if (source === undefined)
     return {
       inputPath,
       fields,
@@ -43,595 +832,58 @@ export function analyzeProgram(
         },
       ],
     };
+
   if (isJavaScriptSource(source)) {
-    report(
+    analysis.report(
       'javascript_schema',
       'JavaScript schema declarations are not supported.',
       source,
     );
     return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
   }
+
   const moduleSymbol = checker.getSymbolAtLocation(source);
-  const moduleExports = moduleSymbol
-    ? checker.getExportsOfModule(moduleSymbol)
-    : [];
-  const exportedSymbols = new Set(
-    moduleExports.map((symbol) =>
-      symbol.flags & ts.SymbolFlags.Alias
-        ? checker.getAliasedSymbol(symbol)
-        : symbol,
-    ),
-  );
-  const roots = source.statements.filter(
-    (node): node is ts.InterfaceDeclaration | ts.ClassDeclaration =>
-      (ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)) &&
-      !!node.name &&
-      exportedSymbols.has(checker.getSymbolAtLocation(node.name)!) &&
-      annotationsFor(node).root,
-  );
-  if (roots.length !== 1) {
-    report(
+  const moduleExports =
+    moduleSymbol === undefined ? [] : checker.getExportsOfModule(moduleSymbol);
+  const [root, ...otherRoots] = findRoots(source, moduleExports, analysis);
+
+  if (root === undefined || otherRoots.length > 0) {
+    analysis.report(
       'root_count',
       'The input must export exactly one marked configuration root.',
       source,
     );
     return { inputPath, fields, diagnostics };
   }
-  const root = roots[0]!;
-  const rootSymbol = checker.getSymbolAtLocation(root.name!);
-  const exportNames = moduleExports
-    .filter(
-      (symbol) =>
-        (symbol.flags & ts.SymbolFlags.Alias
-          ? checker.getAliasedSymbol(symbol)
-          : symbol) === rootSymbol,
-    )
-    .map((symbol) => symbol.name)
-    .sort();
-  const exportName =
-    exportNames.find((name) => name === root.name!.text) ??
-    exportNames.find((name) => name !== 'default') ??
-    'default';
-  const rootExport: RootExport =
-    exportName === 'default'
-      ? { kind: 'default' }
-      : { kind: 'named', name: exportName };
-  if (root.typeParameters?.length) {
-    report(
-      'generic_schema',
-      'Configuration roots cannot have type parameters.',
-      root.name ?? root,
-    );
-    return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
-  }
+
+  const rootExport = rootExportOf(root, moduleExports, checker);
   const rootType = checker.getTypeAtLocation(root);
-  if ((rootType.symbol?.declarations?.length ?? 0) > 1) {
-    report(
-      'declaration_merging',
-      'Configuration roots cannot use declaration merging.',
-      root.name ?? root,
-    );
+
+  if (rejectRoot(root, rootType, analysis))
     return { inputPath, fields, diagnostics: sortDiagnostics(diagnostics) };
-  }
-  for (const index of checker.getIndexInfosOfType(rootType)) {
-    report(
-      'unsupported_type',
-      'Index signatures are not supported.',
-      index.declaration ?? root,
-    );
-  }
-  for (const signature of [
-    ...rootType.getCallSignatures(),
-    ...rootType.getConstructSignatures(),
-  ]) {
-    report(
-      'unsupported_type',
-      'Call and construct signatures are not supported.',
-      signature.declaration ?? root,
-    );
-  }
-  const invalidMembers = new Set<ts.Node>();
-  if (ts.isClassDeclaration(root)) {
-    for (const heritage of root.heritageClauses ?? [])
-      report(
-        'class_inheritance',
-        'Configuration classes cannot inherit other classes.',
-        heritage,
-      );
-    for (const member of root.members) {
-      if (
-        !ts.isPropertyDeclaration(member) ||
-        ts.isPrivateIdentifier(member.name) ||
-        member.modifiers?.some((modifier) =>
-          [
-            ts.SyntaxKind.StaticKeyword,
-            ts.SyntaxKind.PrivateKeyword,
-            ts.SyntaxKind.ProtectedKeyword,
-          ].includes(modifier.kind),
-        )
-      ) {
-        report(
-          'invalid_class_member',
-          'Configuration classes allow only public instance data properties.',
-          member,
-        );
-        invalidMembers.add(member);
-      }
-    }
-  }
-  function containsIntersection(
-    node: ts.TypeNode | ts.ExpressionWithTypeArguments | undefined,
-    seen = new Set<ts.Symbol>(),
-  ): boolean {
-    if (!node) return false;
-    if (ts.isIntersectionTypeNode(node)) return true;
-    if (ts.isParenthesizedTypeNode(node))
-      return containsIntersection(node.type, seen);
-    if (
-      ts.isTypeReferenceNode(node) ||
-      ts.isExpressionWithTypeArguments(node)
-    ) {
-      let symbol = checker.getSymbolAtLocation(
-        ts.isTypeReferenceNode(node) ? node.typeName : node.expression,
-      );
-      if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
-        symbol = checker.getAliasedSymbol(symbol);
-      if (!symbol || seen.has(symbol)) return false;
-      seen.add(symbol);
-      return (
-        symbol.declarations?.some(
-          (declaration) =>
-            ts.isTypeAliasDeclaration(declaration) &&
-            containsIntersection(declaration.type, seen),
-        ) ?? false
-      );
-    }
-    return false;
-  }
-  const validatedHeritage = new Set<ts.Declaration>();
-  function validateHeritage(type: ts.Type): void {
-    const javaScriptDeclaration =
-      type.symbol?.declarations?.find(isJavaScriptSource);
-    if (javaScriptDeclaration) {
-      report(
-        'javascript_schema',
-        'JavaScript schema declarations are not supported.',
-        javaScriptDeclaration,
-      );
-      return;
-    }
-    for (const declaration of type.symbol?.declarations ?? []) {
-      if (
-        !ts.isInterfaceDeclaration(declaration) ||
-        validatedHeritage.has(declaration)
-      )
-        continue;
-      validatedHeritage.add(declaration);
-      for (const clause of declaration.heritageClauses ?? []) {
-        for (const base of clause.types) {
-          if (containsIntersection(base)) {
-            report(
-              'unsupported_type',
-              'Intersections are not supported in heritage.',
-              base,
-            );
-          } else {
-            validateHeritage(checker.getTypeAtLocation(base));
-          }
-        }
-      }
-    }
-  }
-  validateHeritage(rootType);
-  function kindOf(type: ts.Type): FieldKind | undefined {
-    if (type.flags & ts.TypeFlags.String) return { type: 'string' };
-    if (type.flags & ts.TypeFlags.Number) return { type: 'number' };
-    if (type.flags & ts.TypeFlags.Boolean) return { type: 'boolean' };
-    if (type.flags & ts.TypeFlags.StringLiteral)
-      return { type: 'enum', values: [(type as ts.StringLiteralType).value] };
-    if (
-      type.isUnion() &&
-      type.types.every((item) => item.flags & ts.TypeFlags.StringLiteral)
-    ) {
-      return {
-        type: 'enum',
-        values: type.types.map((item) => (item as ts.StringLiteralType).value),
-      };
-    }
-    if (checker.isArrayType(type)) {
-      const element = checker.getTypeArguments(type as ts.TypeReference)[0];
-      const kind = element && kindOf(element);
-      if (kind && ['string', 'number', 'boolean'].includes(kind.type))
-        return {
-          type: 'array',
-          element: kind.type as 'string' | 'number' | 'boolean',
-        };
-    }
-    return undefined;
-  }
-  const activeTypes = new Set<ts.Type>();
-  const activeProperties = new Set<ts.Node>();
-  function hasConditionalType(
-    node: ts.Node,
-    seen = new Set<ts.Symbol>(),
-  ): boolean {
-    if (ts.isConditionalTypeNode(node)) return true;
-    if (ts.isTypeReferenceNode(node)) {
-      let symbol = checker.getSymbolAtLocation(node.typeName);
-      if (symbol?.flags && symbol.flags & ts.SymbolFlags.Alias)
-        symbol = checker.getAliasedSymbol(symbol);
-      if (symbol && !seen.has(symbol)) {
-        seen.add(symbol);
-        if (
-          symbol.declarations?.some(
-            (declaration) =>
-              ts.isTypeAliasDeclaration(declaration) &&
-              hasConditionalType(declaration.type, seen),
-          )
-        )
-          return true;
-      }
-    }
-    return (
-      ts.forEachChild(
-        node,
-        (child) => hasConditionalType(child, seen) || undefined,
-      ) ?? false
-    );
-  }
-  function canChangeShape(
-    node: ts.PropertySignature | ts.PropertyDeclaration,
-  ): boolean {
-    if (node.type && hasConditionalType(node.type)) return true;
-    for (
-      let parent: ts.Node | undefined = node.parent;
-      parent && !ts.isSourceFile(parent);
-      parent = parent.parent
-    ) {
-      if (ts.isConditionalTypeNode(parent)) return true;
-    }
-    return false;
-  }
-  const envNames = new Set<string>();
-  const defaultsPaths = new Set<string>();
-  function mergeInlineDefaults(lower: unknown, upper: unknown): unknown {
-    if (
-      !lower ||
-      !upper ||
-      typeof lower !== 'object' ||
-      typeof upper !== 'object' ||
-      Array.isArray(lower) ||
-      Array.isArray(upper)
-    )
-      return upper;
-    const lowerObject = lower as Record<string, unknown>;
-    const upperObject = upper as Record<string, unknown>;
-    return Object.fromEntries(
-      [
-        ...new Set([...Object.keys(lowerObject), ...Object.keys(upperObject)]),
-      ].map((key) => [
-        key,
-        Object.hasOwn(upperObject, key)
-          ? mergeInlineDefaults(lowerObject[key], upperObject[key])
-          : lowerObject[key],
-      ]),
-    );
-  }
-  function isObjectShape(type: ts.Type): boolean {
-    return (
-      !!(type.flags & ts.TypeFlags.Object) &&
-      !checker.isArrayType(type) &&
-      !checker.isTupleType(type) &&
-      checker.getIndexInfosOfType(type).length === 0 &&
-      type.getCallSignatures().length === 0 &&
-      type.getConstructSignatures().length === 0 &&
-      !(
-        type.symbol?.declarations?.some((declaration) =>
-          program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
-        ) ?? false
-      )
-    );
-  }
-  function visit(
-    type: ts.Type,
-    propertyPath: string[],
-    defaultsPath: string[],
-    optionalParents: string[][],
-    secret: boolean,
-    parentDefault?: unknown,
-  ): void {
-    activeTypes.add(type);
-    for (const property of checker.getPropertiesOfType(type)) {
-      const node = property.valueDeclaration ?? property.declarations?.[0];
-      if (!node || invalidMembers.has(node)) continue;
-      if (isJavaScriptSource(node)) {
-        report(
-          'javascript_schema',
-          'JavaScript schema declarations are not supported.',
-          node,
-        );
-        continue;
-      }
-      const annotations = annotationsFor(node);
-      if (annotations.ignore) continue;
-      const name = property.getName();
-      if (!(ts.isPropertySignature(node) || ts.isPropertyDeclaration(node))) {
-        report('unsupported_type', 'Only data properties are supported.', node);
-        continue;
-      }
-      if (
-        ts.isPropertyDeclaration(node) &&
-        (ts.isPrivateIdentifier(node.name) ||
-          !!(
-            ts.getCombinedModifierFlags(node) &
-            (ts.ModifierFlags.Private |
-              ts.ModifierFlags.Protected |
-              ts.ModifierFlags.Static)
-          ))
-      ) {
-        report(
-          'invalid_class_member',
-          'Configuration classes allow only public instance data properties.',
-          node,
-        );
-        continue;
-      }
-      // Generic types can keep producing fresh identities forever, including
-      // inheritance that substitutes a fresh type into a type-parameter field.
-      // Bound that undecidable expansion separately from proven type cycles.
-      if (activeProperties.has(node) && propertyPath.length >= 128) {
-        report(
-          'schema_too_deep',
-          'Generic type expansion exceeds the supported analysis depth of 128.',
-          node,
-        );
-        continue;
-      }
-      if (
-        !ts.isIdentifier(node.name) ||
-        ['__proto__', 'constructor', 'prototype'].includes(name)
-      ) {
-        report(
-          'invalid_property',
-          'Properties must use safe identifier names.',
-          node,
-        );
-        continue;
-      }
-      if (containsIntersection(node.type)) {
-        report('unsupported_type', 'Intersections are not supported.', node);
-        continue;
-      }
-      if (
-        annotations.key !== undefined &&
-        (!annotations.key ||
-          annotations.key.includes('.') ||
-          ['__proto__', 'constructor', 'prototype'].includes(annotations.key))
-      ) {
-        report(
-          'invalid_annotation',
-          'Key must be one nonempty, safe path segment.',
-          node,
-        );
-        continue;
-      }
-      if (
-        annotations.env !== undefined &&
-        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(annotations.env)
-      ) {
-        report(
-          'invalid_annotation',
-          'Env must be a valid complete environment name.',
-          node,
-        );
-        continue;
-      }
-      if (ts.isPropertyDeclaration(node) && node.initializer) {
-        const result = evaluateDefault(node.initializer, checker);
-        if (!result.ok) {
-          report(
-            'invalid_default',
-            'Initializers must be supported static values.',
-            node,
-          );
-          continue;
-        }
-        if (!annotations.hasDefault) {
-          annotations.hasDefault = true;
-          annotations.defaultValue = result.value;
-        }
-      }
-      if (
-        parentDefault &&
-        typeof parentDefault === 'object' &&
-        Object.hasOwn(parentDefault, name)
-      ) {
-        annotations.hasDefault = true;
-        annotations.defaultValue = mergeInlineDefaults(
-          annotations.defaultValue,
-          (parentDefault as Record<string, unknown>)[name],
-        );
-      }
-      const currentPath = [...propertyPath, name];
-      const currentDefaultsPath = [...defaultsPath, annotations.key ?? name];
-      const optional = !!(property.flags & ts.SymbolFlags.Optional);
-      let propertyType = checker.getTypeOfSymbolAtLocation(property, node);
-      if (
-        propertyType.isUnion() &&
-        propertyType.types.some((item) => item.flags & ts.TypeFlags.Null)
-      ) {
-        report('unsupported_type', 'Nullable unions are not supported.', node);
-        continue;
-      }
-      if (optional) propertyType = checker.getNonNullableType(propertyType);
-      const javaScriptDeclaration =
-        propertyType.symbol?.declarations?.find(isJavaScriptSource);
-      if (javaScriptDeclaration) {
-        report(
-          'javascript_schema',
-          'JavaScript schema declarations are not supported.',
-          javaScriptDeclaration,
-        );
-        continue;
-      }
-      const kind = kindOf(propertyType);
-      const defaultsKey = JSON.stringify(currentDefaultsPath);
-      if (defaultsPaths.has(defaultsKey)) {
-        report(
-          'duplicate_defaults_path',
-          'Multiple fields resolve to conflicting defaults paths.',
-          node,
-        );
-      }
-      defaultsPaths.add(defaultsKey);
-      if (!kind && isObjectShape(propertyType)) {
-        validateHeritage(propertyType);
-        if (annotations.env !== undefined)
-          report('object_env', 'Env annotations apply only to leaves.', node);
-        const resolvesTypeParameter =
-          node.type &&
-          !!(
-            checker.getTypeFromTypeNode(node.type).flags &
-            ts.TypeFlags.TypeParameter
-          );
-        if (
-          activeTypes.has(propertyType) ||
-          (activeProperties.has(node) &&
-            !resolvesTypeParameter &&
-            !canChangeShape(node))
-        ) {
-          report(
-            'recursive_type',
-            'Circular configuration shapes are not supported.',
-            node,
-          );
-          continue;
-        }
-        if (checker.getPropertiesOfType(propertyType).length === 0) {
-          report(
-            'unsupported_type',
-            'Empty object configuration shapes are not supported.',
-            node,
-          );
-          continue;
-        }
-        if (
-          annotations.hasDefault &&
-          (!annotations.defaultValue ||
-            typeof annotations.defaultValue !== 'object' ||
-            Array.isArray(annotations.defaultValue))
-        ) {
-          report(
-            'invalid_default',
-            'Object fields require object defaults.',
-            node,
-          );
-          continue;
-        }
-        if (
-          annotations.hasDefault &&
-          Object.keys(annotations.defaultValue as object).some(
-            (key) =>
-              ['__proto__', 'constructor', 'prototype'].includes(key) ||
-              !checker.getPropertyOfType(propertyType, key),
-          )
-        ) {
-          report(
-            'invalid_default',
-            'Object defaults contain unknown or unsafe properties.',
-            node,
-          );
-          continue;
-        }
-        const alreadyActive = activeProperties.has(node);
-        activeProperties.add(node);
-        const fieldsBeforeVisit = fields.length;
-        const diagnosticsBeforeVisit = diagnostics.length;
-        visit(
-          propertyType,
-          currentPath,
-          currentDefaultsPath,
-          optional ? [...optionalParents, currentPath] : optionalParents,
-          secret || annotations.secret,
-          annotations.defaultValue,
-        );
-        if (!alreadyActive) activeProperties.delete(node);
-        if (
-          fields.length === fieldsBeforeVisit &&
-          diagnostics.length === diagnosticsBeforeVisit
-        ) {
-          report(
-            'unsupported_type',
-            'Configuration object shapes must contain at least one included leaf.',
-            node,
-          );
-        }
-        continue;
-      }
-      if (!kind) {
-        report('unsupported_type', 'This field type is not supported.', node);
-        continue;
-      }
-      if (
-        annotations.hasDefault &&
-        validateTypedValue(kind, annotations.defaultValue) !== undefined
-      ) {
-        report(
-          'invalid_default',
-          'The inline default does not match its field type.',
-          node,
-        );
-        continue;
-      }
-      const snake = currentPath
-        .map((part) =>
-          part
-            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-            .toUpperCase(),
-        )
-        .join('_');
-      const prefix = envPrefix.replace(/_+$/, '');
-      const envName =
-        annotations.env ?? (prefix ? `${prefix}_${snake}` : snake);
-      if (envNames.has(envName))
-        report(
-          'duplicate_env',
-          'Multiple fields resolve to the same environment name.',
-          node,
-        );
-      envNames.add(envName);
-      fields.push({
-        propertyPath: currentPath,
-        defaultsPath: currentDefaultsPath,
-        envName,
-        kind,
-        required: !optional,
-        secret: secret || annotations.secret,
-        hasDefault: annotations.hasDefault,
-        ...(annotations.hasDefault
-          ? { defaultValue: annotations.defaultValue }
-          : {}),
-        optionalParents,
-        location: locationOf(node),
-      });
-    }
-    activeTypes.delete(type);
-  }
-  visit(rootType, [], [], [], false);
+
+  reportRootMembers(root, rootType, analysis);
+  validateHeritage(rootType, analysis);
+  visitType(
+    rootType,
+    { propertyPath: [], defaultsPath: [], optionalParents: [], secret: false },
+    analysis,
+  );
+
   if (fields.length === 0 && diagnostics.length === 0) {
-    report(
+    analysis.report(
       'unsupported_type',
       'Configuration roots must contain at least one included leaf.',
       root,
     );
   }
+
   return {
-    ...(diagnostics.length === 0 && root.name
+    ...(diagnostics.length === 0
       ? { rootName: root.name.text, rootExport }
       : {}),
     inputPath,
     fields,
     diagnostics: sortDiagnostics(diagnostics),
   };
-}
+};

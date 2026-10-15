@@ -31,58 +31,80 @@ const INITIAL_STATE = new Uint32Array([
 const BLOCK_BYTES = 64;
 const LENGTH_BYTES = 8;
 const TERMINATOR_BYTES = 1;
+const WORD_BYTES = 4;
+const STATE_WORDS = 8;
+const SCHEDULE_WORDS = 64;
 
-/** Hashes the UTF-8 encoding of `text` and returns the lowercase hex digest. */
-export function sha256Hex(text: string): string {
-  const state = digest(new TextEncoder().encode(text));
-  let hex = '';
-  for (const word of state) hex += word.toString(16).padStart(8, '0');
-  return hex;
-}
+// Words go through a DataView: typed-array indexing is `number | undefined`
+// under noUncheckedIndexedAccess, and `setUint32` wraps modulo 2^32 the same way.
+const readWord = (view: DataView, index: number) =>
+  view.getUint32(index * WORD_BYTES);
 
-function digest(message: Uint8Array): Uint32Array {
-  const padded = pad(message);
+const writeWord = (view: DataView, index: number, value: number) =>
+  view.setUint32(index * WORD_BYTES, value);
+
+const rotateRight = (value: number, bits: number): number =>
+  (value >>> bits) | (value << (32 - bits));
+
+const padMessage = (message: Uint8Array): Uint8Array => {
+  const minimum = message.length + TERMINATOR_BYTES + LENGTH_BYTES;
+  const length = Math.ceil(minimum / BLOCK_BYTES) * BLOCK_BYTES;
+  const padded = new Uint8Array(length);
+  padded.set(message);
+  padded[message.length] = 0x80;
+
+  const bits = message.length * 8;
+  const view = new DataView(padded.buffer);
+  view.setUint32(length - 8, Math.floor(bits / 0x1_0000_0000), false);
+  view.setUint32(length - 4, bits >>> 0, false);
+  return padded;
+};
+
+const digest = (message: Uint8Array): DataView => {
+  const padded = padMessage(message);
   const block = new DataView(padded.buffer);
-  const state = INITIAL_STATE.slice();
-  const schedule = new Uint32Array(64);
+  const state = new DataView(new ArrayBuffer(STATE_WORDS * WORD_BYTES));
+  const schedule = new DataView(new ArrayBuffer(SCHEDULE_WORDS * WORD_BYTES));
+
+  for (const [index, word] of INITIAL_STATE.entries())
+    writeWord(state, index, word);
 
   for (let offset = 0; offset < padded.length; offset += BLOCK_BYTES) {
     for (let index = 0; index < 16; index++) {
-      schedule[index] = block.getUint32(offset + index * 4, false);
+      writeWord(schedule, index, block.getUint32(offset + index * 4, false));
     }
-    for (let index = 16; index < 64; index++) {
-      const previous = schedule[index - 15] as number;
-      const recent = schedule[index - 2] as number;
+
+    for (let index = 16; index < SCHEDULE_WORDS; index++) {
+      const previous = readWord(schedule, index - 15);
+      const recent = readWord(schedule, index - 2);
       const sigma0 =
         rotateRight(previous, 7) ^ rotateRight(previous, 18) ^ (previous >>> 3);
       const sigma1 =
         rotateRight(recent, 17) ^ rotateRight(recent, 19) ^ (recent >>> 10);
-      schedule[index] =
-        (schedule[index - 16] as number) +
-        sigma0 +
-        (schedule[index - 7] as number) +
-        sigma1;
+      writeWord(
+        schedule,
+        index,
+        readWord(schedule, index - 16) +
+          sigma0 +
+          readWord(schedule, index - 7) +
+          sigma1,
+      );
     }
 
-    let a = state[0] as number;
-    let b = state[1] as number;
-    let c = state[2] as number;
-    let d = state[3] as number;
-    let e = state[4] as number;
-    let f = state[5] as number;
-    let g = state[6] as number;
-    let h = state[7] as number;
+    let a = readWord(state, 0);
+    let b = readWord(state, 1);
+    let c = readWord(state, 2);
+    let d = readWord(state, 3);
+    let e = readWord(state, 4);
+    let f = readWord(state, 5);
+    let g = readWord(state, 6);
+    let h = readWord(state, 7);
 
-    for (let index = 0; index < 64; index++) {
+    for (const [index, constant] of ROUND_CONSTANTS.entries()) {
       const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
       const choose = (e & f) ^ (~e & g);
       const first =
-        (h +
-          sum1 +
-          choose +
-          (ROUND_CONSTANTS[index] as number) +
-          (schedule[index] as number)) >>>
-        0;
+        (h + sum1 + choose + constant + readWord(schedule, index)) >>> 0;
       const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
       const majority = (a & b) ^ (a & c) ^ (b & c);
       const second = (sum0 + majority) >>> 0;
@@ -97,33 +119,20 @@ function digest(message: Uint8Array): Uint32Array {
       a = (first + second) >>> 0;
     }
 
-    state[0] = (state[0] as number) + a;
-    state[1] = (state[1] as number) + b;
-    state[2] = (state[2] as number) + c;
-    state[3] = (state[3] as number) + d;
-    state[4] = (state[4] as number) + e;
-    state[5] = (state[5] as number) + f;
-    state[6] = (state[6] as number) + g;
-    state[7] = (state[7] as number) + h;
+    for (const [index, word] of [a, b, c, d, e, f, g, h].entries())
+      writeWord(state, index, readWord(state, index) + word);
   }
 
   return state;
-}
+};
 
-function pad(message: Uint8Array): Uint8Array {
-  const minimum = message.length + TERMINATOR_BYTES + LENGTH_BYTES;
-  const length = Math.ceil(minimum / BLOCK_BYTES) * BLOCK_BYTES;
-  const padded = new Uint8Array(length);
-  padded.set(message);
-  padded[message.length] = 0x80;
+/** Hashes the UTF-8 encoding of `text` and returns the lowercase hex digest. */
+export const sha256Hex = (text: string): string => {
+  const state = digest(new TextEncoder().encode(text));
+  let hex = '';
 
-  const bits = message.length * 8;
-  const view = new DataView(padded.buffer);
-  view.setUint32(length - 8, Math.floor(bits / 0x1_0000_0000), false);
-  view.setUint32(length - 4, bits >>> 0, false);
-  return padded;
-}
+  for (let index = 0; index < STATE_WORDS; index++)
+    hex += readWord(state, index).toString(16).padStart(8, '0');
 
-function rotateRight(value: number, bits: number): number {
-  return (value >>> bits) | (value << (32 - bits));
-}
+  return hex;
+};

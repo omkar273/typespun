@@ -10,23 +10,25 @@ export const validInterface = `/** @typespun */
 export interface AppConfig { port: number }
 `;
 
-export async function makeDirectory(prefix = 'typespun-cli-'): Promise<string> {
+export const makeDirectory = async (
+  prefix = 'typespun-cli-',
+): Promise<string> => {
   const path = await mkdtemp(join(tmpdir(), prefix));
   temporaryDirectories.push(path);
   return path;
-}
+};
 
-export async function removeTemporaryDirectories(): Promise<void> {
+export const removeTemporaryDirectories = async (): Promise<void> => {
   await Promise.all(
     temporaryDirectories
       .splice(0)
       .map((path) => rm(path, { recursive: true, force: true })),
   );
-}
+};
 
-export async function createBareProject(
+export const createBareProject = async (
   packageFields: Record<string, unknown> = {},
-): Promise<string> {
+): Promise<string> => {
   const path = await makeDirectory();
   await writeProjectFile(
     path,
@@ -39,31 +41,31 @@ export async function createBareProject(
     `${JSON.stringify({ compilerOptions: { strict: true, skipLibCheck: true }, include: ['src/**/*.ts'] }, null, 2)}\n`,
   );
   return path;
-}
+};
 
-export async function createProject(
+export const createProject = async (
   schema: string = validInterface,
   packageFields: Record<string, unknown> = {},
-): Promise<string> {
+): Promise<string> => {
   const path = await createBareProject(packageFields);
   await writeProjectFile(path, 'src/config.ts', schema);
   return path;
-}
+};
 
-export async function writeProjectFile(
+export const writeProjectFile = async (
   project: string,
   relativePath: string,
   contents: string,
-): Promise<void> {
+): Promise<void> => {
   const path = join(project, relativePath);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
-}
+};
 
 /** Makes `typespun` and `typespun-codegen` resolvable from inside a fixture. */
-export async function linkWorkspaceDependencies(
+export const linkWorkspaceDependencies = async (
   project: string,
-): Promise<void> {
+): Promise<void> => {
   const repository = join(import.meta.dirname, '..', '..', '..', '..');
   await mkdir(join(project, 'node_modules'), { recursive: true });
   await symlink(
@@ -74,7 +76,7 @@ export async function linkWorkspaceDependencies(
     join(repository, 'packages/codegen'),
     join(project, 'node_modules/typespun-codegen'),
   );
-}
+};
 
 export interface CapturedStreams {
   readonly streams: {
@@ -86,7 +88,7 @@ export interface CapturedStreams {
 }
 
 /** Collects what the CLI writes instead of letting it reach the real process. */
-export function captureStreams(isTTY = false): CapturedStreams {
+export const captureStreams = (isTTY = false): CapturedStreams => {
   let out = '';
   let err = '';
   return {
@@ -109,4 +111,4 @@ export function captureStreams(isTTY = false): CapturedStreams {
     stdout: () => out,
     stderr: () => err,
   };
-}
+};

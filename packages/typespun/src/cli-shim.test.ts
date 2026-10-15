@@ -18,48 +18,54 @@ afterEach(async () => {
   );
 });
 
-async function makeDirectory(): Promise<string> {
+const makeDirectory = async (): Promise<string> => {
   const path = await mkdtemp(join(tmpdir(), 'typespun-shim-unit-'));
   temporaryDirectories.push(path);
   return path;
-}
+};
 
-async function installCodegen(root: string, exitCode = 0): Promise<string> {
+const installCodegen = async (root: string, exitCode = 0): Promise<string> => {
   const directory = join(root, 'node_modules/typespun-codegen/dist');
   await mkdir(directory, { recursive: true });
   const path = join(directory, 'bin.js');
   await writeFile(path, `process.exitCode = ${exitCode};\n`);
   return path;
-}
+};
 
 /** A silent stand-in for bunx or npx on PATH. */
-async function installFakeLauncher(
+const installFakeLauncher = async (
   directory: string,
   name: string,
   exitCode: number,
-): Promise<void> {
+): Promise<void> => {
   const path = join(directory, name);
   await writeFile(path, `#!/bin/sh\nexit ${exitCode}\n`);
   await chmod(path, 0o755);
-}
+};
 
 /** Collects what the shim writes without letting it reach the test output. */
-async function captureStderr(fn: () => Promise<number>): Promise<{
+const captureStderr = async (
+  fn: () => Promise<number>,
+): Promise<{
   exitCode: number;
   stderr: string;
-}> {
+}> => {
   const original = process.stderr.write.bind(process.stderr);
   let stderr = '';
-  process.stderr.write = ((value: string) => {
+
+  process.stderr.write = (value: string) => {
     stderr += value;
     return true;
-  }) as typeof process.stderr.write;
+  };
+
   try {
-    return { exitCode: await fn(), stderr };
+    const exitCode = await fn();
+
+    return { exitCode, stderr };
   } finally {
     process.stderr.write = original;
   }
-}
+};
 
 describe('resolveCodegenBinary', () => {
   test('finds a code generator installed in the starting directory', async () => {
@@ -105,7 +111,9 @@ describe('run', () => {
     await installCodegen(project, 3);
     process.chdir(project);
 
-    expect(await run(['generate'])).toBe(3);
+    const exitCode = await run(['generate']);
+
+    expect(exitCode).toBe(3);
   });
 
   test('falls back to bunx when no binary is installed', async () => {
@@ -115,7 +123,9 @@ describe('run', () => {
     process.chdir(project);
     process.env.PATH = binDirectory;
 
-    expect(await run(['generate'])).toBe(0);
+    const exitCode = await run(['generate']);
+
+    expect(exitCode).toBe(0);
   });
 
   test('falls back to npx when bunx is unavailable', async () => {
@@ -125,7 +135,9 @@ describe('run', () => {
     process.chdir(project);
     process.env.PATH = binDirectory;
 
-    expect(await run(['check'])).toBe(4);
+    const exitCode = await run(['check']);
+
+    expect(exitCode).toBe(4);
   });
 
   test('stops at a launcher that exists but cannot be executed', async () => {
@@ -137,7 +149,9 @@ describe('run', () => {
     process.chdir(project);
     process.env.PATH = binDirectory;
 
-    expect(await run(['generate'])).toBe(1);
+    const exitCode = await run(['generate']);
+
+    expect(exitCode).toBe(1);
   });
 
   test('reports guidance and exits 127 when nothing can run the CLI', async () => {
@@ -163,7 +177,9 @@ describe('run', () => {
     );
     process.chdir(project);
 
-    expect(await run(['generate'])).toBe(1);
+    const exitCode = await run(['generate']);
+
+    expect(exitCode).toBe(1);
   });
 
   test('treats a signal-killed launcher as a failure', async () => {
@@ -175,6 +191,8 @@ describe('run', () => {
     process.chdir(project);
     process.env.PATH = binDirectory;
 
-    expect(await run(['generate'])).toBe(1);
+    const exitCode = await run(['generate']);
+
+    expect(exitCode).toBe(1);
   });
 });

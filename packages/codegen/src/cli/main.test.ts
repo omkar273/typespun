@@ -28,15 +28,15 @@ afterEach(async () => {
   await removeTemporaryDirectories();
 });
 
-async function invoke(
+const invoke = async (
   cwd: string,
   args: readonly string[],
   isTTY = false,
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
   const captured = captureStreams(isTTY);
-  const exitCode = await runCli(args, captured.streams, cwd);
+  const exitCode = await runCli(args, { streams: captured.streams, cwd });
   return { exitCode, stdout: captured.stdout(), stderr: captured.stderr() };
-}
+};
 
 describe('runCli usage', () => {
   test.each([
@@ -60,10 +60,13 @@ describe('runCli usage', () => {
       const result = await invoke(process.cwd(), args);
 
       expect(result.exitCode).toBe(0);
-      const packageJson = JSON.parse(
-        await readFile(join(import.meta.dirname, '../../package.json'), 'utf8'),
+      const manifestText = await readFile(
+        join(import.meta.dirname, '../../package.json'),
+        'utf8',
       );
-      expect(result.stdout).toBe(`${packageJson.version}\n`);
+      const manifest: unknown = JSON.parse(manifestText);
+      expect(result.stdout).toMatch(/^[^\n]+\n$/u);
+      expect(manifest).toHaveProperty('version', result.stdout.slice(0, -1));
       expect(result.stderr).toBe('');
     },
   );
@@ -74,12 +77,11 @@ describe('runCli usage', () => {
     await writeFile(manifestPath, '{}');
 
     const captured = captureStreams(false);
-    const exitCode = await runCli(
-      ['--version'],
-      captured.streams,
-      process.cwd(),
-      pathToFileURL(manifestPath),
-    );
+    const exitCode = await runCli(['--version'], {
+      streams: captured.streams,
+      cwd: process.cwd(),
+      packageJsonUrl: pathToFileURL(manifestPath),
+    });
 
     expect(exitCode).toBe(1);
     expect(captured.stderr()).toContain(
@@ -104,10 +106,10 @@ describe('runCli usage', () => {
       '--config may be specified only once',
     ],
   ])('rejects malformed generate options %j', async (args, message) => {
-    const result = await invoke(process.cwd(), args as string[]);
+    const result = await invoke(process.cwd(), args);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain(message as string);
+    expect(result.stderr).toContain(message);
   });
 
   test.each([
@@ -130,10 +132,10 @@ describe('runCli usage', () => {
     ],
     [['init', '--nope'], 'Unknown option: --nope'],
   ])('rejects malformed init options %j', async (args, message) => {
-    const result = await invoke(process.cwd(), args as string[]);
+    const result = await invoke(process.cwd(), args);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain(message as string);
+    expect(result.stderr).toContain(message);
   });
 });
 
@@ -157,14 +159,16 @@ describe('runCli generate and check', () => {
   test('reports stale output on stderr without rewriting it', async () => {
     const project = await createProject();
     const output = join(project, 'src/generated/typespun.ts');
-    expect((await invoke(project, ['generate'])).exitCode).toBe(0);
+    await expect(invoke(project, ['generate'])).resolves.toMatchObject({
+      exitCode: 0,
+    });
     await writeFile(output, '// stale\n');
 
     const result = await invoke(project, ['check']);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('is stale; run typespun generate.');
-    expect(await readFile(output, 'utf8')).toBe('// stale\n');
+    await expect(readFile(output, 'utf8')).resolves.toBe('// stale\n');
   });
 
   test('exits one and reports the location for an unusable schema', async () => {
@@ -306,7 +310,9 @@ describe('runCli init wiring', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Created src/config.ts.');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toBe(
+    await expect(
+      readFile(join(project, 'src/config.ts'), 'utf8'),
+    ).resolves.toBe(
       '/** @typespun */\nexport interface AppConfig {\n  port: number;\n}\n',
     );
   });
@@ -325,9 +331,9 @@ describe('runCli init wiring', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Created src/config.ts.');
-    expect(await readFile(join(project, 'typespun.json'), 'utf8')).toContain(
-      '"envPrefix": "APP"',
-    );
+    await expect(
+      readFile(join(project, 'typespun.json'), 'utf8'),
+    ).resolves.toContain('"envPrefix": "APP"');
   });
 
   test('reports diagnostics from the generation that init performs', async () => {

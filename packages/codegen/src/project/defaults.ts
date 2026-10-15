@@ -6,6 +6,7 @@ import type {
   SecretDefaultsPolicy,
   UnknownKeysPolicy,
 } from '../contracts.js';
+import { attempt } from '../internal/attempt.js';
 
 export interface DefaultsDocument {
   readonly path: string;
@@ -38,89 +39,76 @@ export interface CompiledDefaultsResult {
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const ALIAS_LIMIT = 20;
 
-export function compileDefaults(
-  document: DefaultsDocument,
-  fields: readonly FieldIR[],
-  policies: CompileDefaultsPolicies,
-): CompiledDefaultsResult {
-  const warnings: DefaultsDiagnostic[] = [];
-  const errors: DefaultsDiagnostic[] = [];
-  const values: Record<string, unknown> = {};
-  const compiledPaths = new Set<string>();
-  const fieldByDefaultsPath = new Map(
-    fields.map((field) => [toPathKey(field.defaultsPath), field]),
-  );
-
-  const parsed = parseDefaultsDocument(document, errors);
-  if (!isRecord(parsed)) {
-    if (parsed !== undefined) {
-      errors.push(
-        diagnostic(
-          'invalid_defaults_document',
-          [],
-          document.path,
-          'Defaults document must contain an object at its root',
-        ),
-      );
-    }
-    applyInlineDefaults(
-      fields,
-      compiledPaths,
-      policies,
-      values,
-      warnings,
-      errors,
-    );
-    return { values, warnings, errors };
-  }
-
-  collectUnsafeKeys(parsed, [], document.path, errors, new Set());
-  walkDefaults(
-    parsed,
-    [],
-    fieldByDefaultsPath,
-    fields,
-    policies,
-    document.path,
-    values,
-    warnings,
-    errors,
-    compiledPaths,
-  );
-
-  applyInlineDefaults(
-    fields,
-    compiledPaths,
-    policies,
-    values,
-    warnings,
-    errors,
-  );
-
-  return { values, warnings, errors };
+interface CompileContext {
+  readonly fields: readonly FieldIR[];
+  readonly fieldByDefaultsPath: ReadonlyMap<string, FieldIR>;
+  readonly policies: CompileDefaultsPolicies;
+  readonly file: string;
+  readonly values: Record<string, unknown>;
+  readonly warnings: DefaultsDiagnostic[];
+  readonly errors: DefaultsDiagnostic[];
+  readonly compiledPaths: Set<string>;
 }
 
-function parseDefaultsDocument(
+interface UnsafeKeyScan {
+  readonly file: string;
+  readonly errors: DefaultsDiagnostic[];
+  readonly ancestors: Set<object>;
+}
+
+interface DiagnosticInput {
+  readonly code: DefaultsDiagnostic['code'];
+  readonly path: readonly string[];
+  readonly file: string;
+  readonly message: string;
+}
+
+interface FieldDefault {
+  readonly field: FieldIR;
+  readonly value: unknown;
+  readonly defaultsPath: readonly string[];
+}
+
+const diagnostic = ({
+  code,
+  path,
+  file,
+  message,
+}: DiagnosticInput): DefaultsDiagnostic => ({
+  code,
+  path: path.join('.'),
+  file,
+  message,
+});
+
+const toPathKey = (path: readonly string[]): string => JSON.stringify(path);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseDefaultsDocument = (
   document: DefaultsDocument,
   errors: DefaultsDiagnostic[],
-): unknown {
+): unknown => {
   if (extname(document.path) === '.json') {
-    try {
-      return JSON.parse(document.content);
-    } catch {
-      errors.push(
-        diagnostic(
-          'invalid_defaults_document',
-          [],
-          document.path,
-          'Defaults document is not valid JSON',
-        ),
-      );
-      return undefined;
+    const json = attempt((): unknown => JSON.parse(document.content));
+
+    if (json.ok) {
+      return json.data;
     }
+
+    errors.push(
+      diagnostic({
+        code: 'invalid_defaults_document',
+        path: [],
+        file: document.path,
+        message: 'Defaults document is not valid JSON',
+      }),
+    );
+    return undefined;
   }
 
-  try {
+  const yaml = attempt((): unknown => {
     const parsed = parseDocument(document.content, {
       customTags: [],
       merge: false,
@@ -130,309 +118,50 @@ function parseDefaultsDocument(
       stringKeys: true,
       uniqueKeys: true,
     });
+
     if (parsed.errors.length > 0 || parsed.warnings.length > 0) {
-      errors.push(
-        diagnostic(
-          'invalid_defaults_document',
-          [],
-          document.path,
-          'Defaults document is not valid YAML',
-        ),
-      );
-      return undefined;
+      throw new Error('invalid YAML');
     }
+
     return parsed.toJS({ maxAliasCount: ALIAS_LIMIT });
-  } catch {
-    errors.push(
-      diagnostic(
-        'invalid_defaults_document',
-        [],
-        document.path,
-        'Defaults document is not valid YAML',
-      ),
-    );
-    return undefined;
-  }
-}
+  });
 
-function walkDefaults(
-  value: Record<string, unknown>,
-  path: readonly string[],
-  fieldByDefaultsPath: ReadonlyMap<string, FieldIR>,
-  fields: readonly FieldIR[],
-  policies: CompileDefaultsPolicies,
-  file: string,
-  values: Record<string, unknown>,
-  warnings: DefaultsDiagnostic[],
-  errors: DefaultsDiagnostic[],
-  compiledPaths: Set<string>,
-): void {
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = [...path, key];
-    if (DANGEROUS_KEYS.has(key)) {
-      continue;
-    }
-
-    const field = fieldByDefaultsPath.get(toPathKey(childPath));
-    if (field !== undefined) {
-      compileField(
-        field,
-        child,
-        childPath,
-        policies,
-        file,
-        values,
-        warnings,
-        errors,
-        compiledPaths,
-      );
-      continue;
-    }
-
-    if (hasDefaultsDescendant(fields, childPath)) {
-      if (!isRecord(child)) {
-        errors.push(
-          diagnostic(
-            'invalid_default_value',
-            childPath,
-            file,
-            'Expected an object for nested defaults',
-          ),
-        );
-        continue;
-      }
-      walkDefaults(
-        child,
-        childPath,
-        fieldByDefaultsPath,
-        fields,
-        policies,
-        file,
-        values,
-        warnings,
-        errors,
-        compiledPaths,
-      );
-      continue;
-    }
-
-    reportUnknownPath(childPath, policies.unknownKeys, file, warnings, errors);
-  }
-}
-
-function collectUnsafeKeys(
-  value: unknown,
-  path: readonly string[],
-  file: string,
-  errors: DefaultsDiagnostic[],
-  ancestors: Set<object>,
-): void {
-  if (!Array.isArray(value) && !isRecord(value)) {
-    return;
+  if (yaml.ok) {
+    return yaml.data;
   }
 
-  if (ancestors.has(value)) {
-    errors.push(
-      diagnostic(
-        'invalid_defaults_document',
-        path,
-        file,
-        'Defaults document contains a recursive alias',
-      ),
-    );
-    return;
-  }
-
-  ancestors.add(value);
-  if (Array.isArray(value)) {
-    for (const [index, child] of value.entries()) {
-      collectUnsafeKeys(
-        child,
-        [...path, String(index)],
-        file,
-        errors,
-        ancestors,
-      );
-    }
-  } else {
-    for (const [key, child] of Object.entries(value)) {
-      const childPath = [...path, key];
-      if (DANGEROUS_KEYS.has(key)) {
-        errors.push(
-          diagnostic(
-            'unsafe_defaults_key',
-            childPath,
-            file,
-            'Defaults path contains an unsafe key',
-          ),
-        );
-      }
-      collectUnsafeKeys(child, childPath, file, errors, ancestors);
-    }
-  }
-  ancestors.delete(value);
-}
-
-function compileField(
-  field: FieldIR,
-  value: unknown,
-  defaultsPath: readonly string[],
-  policies: CompileDefaultsPolicies,
-  file: string,
-  values: Record<string, unknown>,
-  warnings: DefaultsDiagnostic[],
-  errors: DefaultsDiagnostic[],
-  compiledPaths: Set<string>,
-): void {
-  compiledPaths.add(toPathKey(field.propertyPath));
-  const validationMessage = validateTypedValue(field.kind, value);
-  if (validationMessage !== undefined) {
-    errors.push(
-      diagnostic(
-        'invalid_default_value',
-        defaultsPath,
-        file,
-        field.secret
-          ? 'Secret default does not match its declared field type'
-          : validationMessage,
-      ),
-    );
-    return;
-  }
-
-  if (field.secret) {
-    if (policies.secretDefaults === 'error') {
-      errors.push(
-        diagnostic(
-          'secret_default',
-          defaultsPath,
-          file,
-          'Secret fields cannot have compiled defaults',
-        ),
-      );
-      return;
-    }
-    if (policies.secretDefaults === 'warn') {
-      warnings.push(
-        diagnostic(
-          'secret_default',
-          defaultsPath,
-          file,
-          'Secret field has a compiled default',
-        ),
-      );
-    }
-  }
-
-  if (!setValue(values, field.propertyPath, cloneValue(value))) {
-    errors.push(
-      diagnostic(
-        'unsafe_defaults_key',
-        defaultsPath,
-        file,
-        'Defaults path contains an unsafe key',
-      ),
-    );
-  }
-}
-
-function applyInlineDefaults(
-  fields: readonly FieldIR[],
-  compiledPaths: ReadonlySet<string>,
-  policies: CompileDefaultsPolicies,
-  values: Record<string, unknown>,
-  warnings: DefaultsDiagnostic[],
-  errors: DefaultsDiagnostic[],
-): void {
-  for (const field of fields) {
-    if (
-      !field.hasDefault ||
-      field.defaultValue === undefined ||
-      compiledPaths.has(toPathKey(field.propertyPath))
-    ) {
-      continue;
-    }
-
-    if (field.secret) {
-      if (policies.secretDefaults === 'error') {
-        errors.push(
-          diagnostic(
-            'secret_default',
-            field.defaultsPath,
-            field.location.file,
-            'Secret fields cannot have inline defaults',
-          ),
-        );
-        continue;
-      }
-      if (policies.secretDefaults === 'warn') {
-        warnings.push(
-          diagnostic(
-            'secret_default',
-            field.defaultsPath,
-            field.location.file,
-            'Secret field has an inline default',
-          ),
-        );
-      }
-    }
-
-    if (!setValue(values, field.propertyPath, cloneValue(field.defaultValue))) {
-      errors.push(
-        diagnostic(
-          'unsafe_defaults_key',
-          field.defaultsPath,
-          field.location.file,
-          'Defaults path contains an unsafe key',
-        ),
-      );
-    }
-  }
-}
-
-function reportUnknownPath(
-  path: readonly string[],
-  policy: UnknownKeysPolicy,
-  file: string,
-  warnings: DefaultsDiagnostic[],
-  errors: DefaultsDiagnostic[],
-): void {
-  if (policy === 'ignore') {
-    return;
-  }
-
-  const target = policy === 'warn' ? warnings : errors;
-  target.push(
-    diagnostic(
-      'unknown_defaults_key',
-      path,
-      file,
-      'Defaults path does not match a declared field',
-    ),
+  errors.push(
+    diagnostic({
+      code: 'invalid_defaults_document',
+      path: [],
+      file: document.path,
+      message: 'Defaults document is not valid YAML',
+    }),
   );
-}
+  return undefined;
+};
 
-function hasDefaultsDescendant(
+const hasDefaultsDescendant = (
   fields: readonly FieldIR[],
   path: readonly string[],
-): boolean {
-  return fields.some(
+): boolean =>
+  fields.some(
     (field) =>
       field.defaultsPath.length > path.length &&
       path.every((part, index) => field.defaultsPath[index] === part),
   );
-}
 
-function setValue(
+const setValue = (
   target: Record<string, unknown>,
   path: readonly string[],
   value: unknown,
-): boolean {
+): boolean => {
   if (path.length === 0 || path.some((part) => DANGEROUS_KEYS.has(part))) {
     return false;
   }
 
   let current = target;
+
   for (const [index, part] of path.entries()) {
     if (index === path.length - 1) {
       Object.defineProperty(current, part, {
@@ -445,6 +174,7 @@ function setValue(
     }
 
     const existing = current[part];
+
     if (isRecord(existing)) {
       current = existing;
       continue;
@@ -461,14 +191,16 @@ function setValue(
   }
 
   return false;
-}
+};
 
-function cloneValue(value: unknown): unknown {
+const cloneValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map((item) => cloneValue(item));
   }
+
   if (isRecord(value)) {
     const cloned: Record<string, unknown> = {};
+
     for (const [key, child] of Object.entries(value)) {
       if (!DANGEROUS_KEYS.has(key)) {
         Object.defineProperty(cloned, key, {
@@ -479,24 +211,279 @@ function cloneValue(value: unknown): unknown {
         });
       }
     }
+
     return cloned;
   }
+
   return value;
-}
+};
 
-function diagnostic(
-  code: DefaultsDiagnostic['code'],
+const reportUnknownPath = (
+  context: CompileContext,
   path: readonly string[],
-  file: string,
-  message: string,
-): DefaultsDiagnostic {
-  return { code, path: path.join('.'), file, message };
-}
+): void => {
+  const policy = context.policies.unknownKeys;
 
-function toPathKey(path: readonly string[]): string {
-  return JSON.stringify(path);
-}
+  if (policy === 'ignore') {
+    return;
+  }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+  const target = policy === 'warn' ? context.warnings : context.errors;
+  target.push(
+    diagnostic({
+      code: 'unknown_defaults_key',
+      path,
+      file: context.file,
+      message: 'Defaults path does not match a declared field',
+    }),
+  );
+};
+
+const compileField = (
+  context: CompileContext,
+  { field, value, defaultsPath }: FieldDefault,
+): void => {
+  const { policies, file, values, warnings, errors } = context;
+  context.compiledPaths.add(toPathKey(field.propertyPath));
+  const validationMessage = validateTypedValue(field.kind, value);
+
+  if (validationMessage !== undefined) {
+    errors.push(
+      diagnostic({
+        code: 'invalid_default_value',
+        path: defaultsPath,
+        file,
+        message: field.secret
+          ? 'Secret default does not match its declared field type'
+          : validationMessage,
+      }),
+    );
+    return;
+  }
+
+  if (field.secret) {
+    if (policies.secretDefaults === 'error') {
+      errors.push(
+        diagnostic({
+          code: 'secret_default',
+          path: defaultsPath,
+          file,
+          message: 'Secret fields cannot have compiled defaults',
+        }),
+      );
+      return;
+    }
+
+    if (policies.secretDefaults === 'warn') {
+      warnings.push(
+        diagnostic({
+          code: 'secret_default',
+          path: defaultsPath,
+          file,
+          message: 'Secret field has a compiled default',
+        }),
+      );
+    }
+  }
+
+  if (!setValue(values, field.propertyPath, cloneValue(value))) {
+    errors.push(
+      diagnostic({
+        code: 'unsafe_defaults_key',
+        path: defaultsPath,
+        file,
+        message: 'Defaults path contains an unsafe key',
+      }),
+    );
+  }
+};
+
+const walkDefaults = (
+  context: CompileContext,
+  value: Record<string, unknown>,
+  path: readonly string[],
+): void => {
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = [...path, key];
+
+    if (DANGEROUS_KEYS.has(key)) {
+      continue;
+    }
+
+    const field = context.fieldByDefaultsPath.get(toPathKey(childPath));
+
+    if (field !== undefined) {
+      compileField(context, { field, value: child, defaultsPath: childPath });
+      continue;
+    }
+
+    if (hasDefaultsDescendant(context.fields, childPath)) {
+      if (!isRecord(child)) {
+        context.errors.push(
+          diagnostic({
+            code: 'invalid_default_value',
+            path: childPath,
+            file: context.file,
+            message: 'Expected an object for nested defaults',
+          }),
+        );
+        continue;
+      }
+
+      walkDefaults(context, child, childPath);
+      continue;
+    }
+
+    reportUnknownPath(context, childPath);
+  }
+};
+
+const collectUnsafeKeys = (
+  scan: UnsafeKeyScan,
+  value: unknown,
+  path: readonly string[],
+): void => {
+  if (!Array.isArray(value) && !isRecord(value)) {
+    return;
+  }
+
+  if (scan.ancestors.has(value)) {
+    scan.errors.push(
+      diagnostic({
+        code: 'invalid_defaults_document',
+        path,
+        file: scan.file,
+        message: 'Defaults document contains a recursive alias',
+      }),
+    );
+    return;
+  }
+
+  scan.ancestors.add(value);
+
+  if (Array.isArray(value)) {
+    for (const [index, child] of value.entries()) {
+      collectUnsafeKeys(scan, child, [...path, String(index)]);
+    }
+  } else {
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = [...path, key];
+
+      if (DANGEROUS_KEYS.has(key)) {
+        scan.errors.push(
+          diagnostic({
+            code: 'unsafe_defaults_key',
+            path: childPath,
+            file: scan.file,
+            message: 'Defaults path contains an unsafe key',
+          }),
+        );
+      }
+
+      collectUnsafeKeys(scan, child, childPath);
+    }
+  }
+
+  scan.ancestors.delete(value);
+};
+
+const applyInlineDefaults = (context: CompileContext): void => {
+  const { policies, values, warnings, errors } = context;
+
+  for (const field of context.fields) {
+    const hasInlineDefault =
+      field.hasDefault && field.defaultValue !== undefined;
+
+    if (
+      !hasInlineDefault ||
+      context.compiledPaths.has(toPathKey(field.propertyPath))
+    ) {
+      continue;
+    }
+
+    if (field.secret) {
+      if (policies.secretDefaults === 'error') {
+        errors.push(
+          diagnostic({
+            code: 'secret_default',
+            path: field.defaultsPath,
+            file: field.location.file,
+            message: 'Secret fields cannot have inline defaults',
+          }),
+        );
+        continue;
+      }
+
+      if (policies.secretDefaults === 'warn') {
+        warnings.push(
+          diagnostic({
+            code: 'secret_default',
+            path: field.defaultsPath,
+            file: field.location.file,
+            message: 'Secret field has an inline default',
+          }),
+        );
+      }
+    }
+
+    if (!setValue(values, field.propertyPath, cloneValue(field.defaultValue))) {
+      errors.push(
+        diagnostic({
+          code: 'unsafe_defaults_key',
+          path: field.defaultsPath,
+          file: field.location.file,
+          message: 'Defaults path contains an unsafe key',
+        }),
+      );
+    }
+  }
+};
+
+export const compileDefaults = (
+  document: DefaultsDocument,
+  fields: readonly FieldIR[],
+  policies: CompileDefaultsPolicies,
+): CompiledDefaultsResult => {
+  const context: CompileContext = {
+    fields,
+    fieldByDefaultsPath: new Map(
+      fields.map((field) => [toPathKey(field.defaultsPath), field]),
+    ),
+    policies,
+    file: document.path,
+    values: {},
+    warnings: [],
+    errors: [],
+    compiledPaths: new Set<string>(),
+  };
+  const { values, warnings, errors } = context;
+
+  const parsed = parseDefaultsDocument(document, errors);
+
+  if (!isRecord(parsed)) {
+    if (parsed !== undefined) {
+      errors.push(
+        diagnostic({
+          code: 'invalid_defaults_document',
+          path: [],
+          file: document.path,
+          message: 'Defaults document must contain an object at its root',
+        }),
+      );
+    }
+
+    applyInlineDefaults(context);
+    return { values, warnings, errors };
+  }
+
+  collectUnsafeKeys(
+    { file: document.path, errors, ancestors: new Set() },
+    parsed,
+    [],
+  );
+  walkDefaults(context, parsed, []);
+
+  applyInlineDefaults(context);
+
+  return { values, warnings, errors };
+};

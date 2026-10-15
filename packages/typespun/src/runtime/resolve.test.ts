@@ -4,8 +4,8 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createLoader } from '../generated.js';
-import { ConfigError } from '../schema.js';
-import type { GeneratedSchema } from '../schema.js';
+import { ConfigError, type GeneratedSchema } from '../schema.js';
+import { attempt } from './attempt.js';
 
 interface RuntimeConfig {
   port: number;
@@ -72,6 +72,8 @@ const schema = {
 } as const satisfies GeneratedSchema;
 
 const load = createLoader<RuntimeConfig>(schema);
+// Loose typing lets tests pass override values that the types reject.
+const untypedLoad = createLoader<Record<string, unknown>>(schema);
 
 // This schema uses generic names that can legitimately exist in a real
 // environment, and the runtime reads process.env whenever no explicit source is
@@ -92,7 +94,7 @@ afterEach(() => {
   }
 });
 
-describe('createLoader', () => {
+describe('createLoader value coercion', () => {
   test('does not coerce a lower-precedence value before selecting overrides', async () => {
     using temp = await makeTempDirectory();
     const firstPath = join(temp.path, 'first.env');
@@ -248,7 +250,7 @@ describe('createLoader', () => {
 
   test('does not coerce a string override that should already be typed', () => {
     const error = getConfigError(() =>
-      load({ source: validSource(), overrides: { port: '5000' as never } }),
+      untypedLoad({ source: validSource(), overrides: { port: '5000' } }),
     );
 
     expect(error.issues).toEqual([
@@ -279,7 +281,9 @@ describe('createLoader', () => {
       expect.objectContaining({ code: 'missing_value', path: 'mode' }),
     ]);
   });
+});
 
+describe('createLoader source precedence', () => {
   test('lets the later dotenv file replace the earlier dotenv value', async () => {
     using temp = await makeTempDirectory();
     const firstPath = join(temp.path, 'first.env');
@@ -450,6 +454,32 @@ describe('createLoader', () => {
     });
   });
 
+  test('reports a missing required dotenv file and an unreadable optional one', async () => {
+    using temp = await makeTempDirectory();
+    const missingPath = join(temp.path, 'missing.env');
+    const error = getConfigError(() =>
+      load({
+        envFiles: [missingPath, { path: temp.path, optional: true }],
+        source: validSource(),
+      }),
+    );
+
+    expect(error.issues).toEqual([
+      {
+        code: 'source_read_failed',
+        path: missingPath,
+        source: 'dotenv',
+        message: `Unable to read dotenv file: ${missingPath}`,
+      },
+      {
+        code: 'source_read_failed',
+        path: temp.path,
+        source: 'dotenv',
+        message: `Unable to read dotenv file: ${temp.path}`,
+      },
+    ]);
+  });
+
   test('parses dotenv files without mutating process.env', async () => {
     using temp = await makeTempDirectory();
     const dotenvPath = join(temp.path, 'runtime.env');
@@ -460,7 +490,9 @@ describe('createLoader', () => {
 
     expect(process.env).toEqual(before);
   });
+});
 
+describe('createLoader diagnostics and object safety', () => {
   test('collects invalid and missing values instead of throwing after the first field', () => {
     const error = getConfigError(() =>
       load({ source: { PORT: 'nope', ENABLED: 'yes' } }),
@@ -505,7 +537,8 @@ describe('createLoader', () => {
   });
 
   test('reads explicit sources through own properties only', () => {
-    const inherited = Object.create(validSource()) as Record<string, string>;
+    const inherited: Record<string, string> = {};
+    Reflect.setPrototypeOf(inherited, validSource());
     const error = getConfigError(() => load({ source: inherited }));
 
     expect(error.issues.map((issue) => issue.code)).toEqual([
@@ -518,9 +551,9 @@ describe('createLoader', () => {
   });
 
   test('rejects non-string values supplied through the runtime source boundary', () => {
-    const error = getConfigError(() =>
-      load({ source: { ...validSource(), PORT: 4000 } as never }),
-    );
+    const source: Record<string, string | undefined> = validSource();
+    Reflect.set(source, 'PORT', 4000);
+    const error = getConfigError(() => load({ source }));
 
     expect(error.issues).toEqual([
       expect.objectContaining({
@@ -616,7 +649,7 @@ describe('createLoader', () => {
       database?: { host: string; port: number };
     }>(optionalDatabaseSchema);
     const error = getConfigError(() =>
-      loadDatabase({ source: {}, overrides: overrides as never }),
+      loadDatabase({ source: {}, overrides: overrides }),
     );
 
     expect(error.issues).toEqual([
@@ -691,7 +724,9 @@ describe('createLoader', () => {
         path: '__proto__',
       }),
     ]);
-    expect(({} as { port?: number }).port).toBeUndefined();
+    const plain: { port?: number } = {};
+
+    expect(plain.port).toBeUndefined();
   });
 });
 
@@ -789,86 +824,80 @@ const requiredNestedContainerSchema = {
   ],
 } as const satisfies GeneratedSchema;
 
-function defaultsSchema(
+const defaultsSchema = (
   inlineOrigins: readonly string[],
   compiledOrigins?: readonly string[],
-): GeneratedSchema {
-  return {
-    protocolVersion: 1,
-    fields: [
-      {
-        propertyPath: ['origins'],
-        defaultsPath: ['origins'],
-        envName: 'ORIGINS',
-        kind: { type: 'array', element: 'string' },
-        required: true,
-        secret: false,
-        hasDefault: true,
-        defaultValue: inlineOrigins,
-        optionalParents: [],
-      },
-    ],
-    ...(compiledOrigins === undefined
-      ? {}
-      : { compiledDefaults: { origins: compiledOrigins } }),
-  };
-}
+): GeneratedSchema => ({
+  protocolVersion: 1,
+  fields: [
+    {
+      propertyPath: ['origins'],
+      defaultsPath: ['origins'],
+      envName: 'ORIGINS',
+      kind: { type: 'array', element: 'string' },
+      required: true,
+      secret: false,
+      hasDefault: true,
+      defaultValue: inlineOrigins,
+      optionalParents: [],
+    },
+  ],
+  ...(compiledOrigins === undefined
+    ? {}
+    : { compiledDefaults: { origins: compiledOrigins } }),
+});
 
-function validSource(
+const validSource = (
   overrides: Record<string, string> = {},
-): Record<string, string> {
-  return {
-    PORT: '3000',
-    ENABLED: 'true',
-    MODE: 'production',
-    ORIGINS: '["https://example.com"]',
-    TOKEN: 'runtime-token',
-    ...overrides,
-  };
-}
+): Record<string, string> => ({
+  PORT: '3000',
+  ENABLED: 'true',
+  MODE: 'production',
+  ORIGINS: '["https://example.com"]',
+  TOKEN: 'runtime-token',
+  ...overrides,
+});
 
-function validDotenv(overrides: Record<string, string> = {}): string {
-  return Object.entries(validSource(overrides))
+const validDotenv = (overrides: Record<string, string> = {}): string =>
+  Object.entries(validSource(overrides))
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
-}
 
-function singleFieldSchema(
+const singleFieldSchema = (
   envName: string,
   propertyPath: readonly string[] = ['port'],
-): GeneratedSchema {
-  return {
-    protocolVersion: 1,
-    fields: [
-      {
-        propertyPath,
-        defaultsPath: propertyPath,
-        envName,
-        kind: { type: 'number' },
-        required: true,
-        secret: false,
-        hasDefault: false,
-        optionalParents: [],
-      },
-    ],
-  };
-}
+): GeneratedSchema => ({
+  protocolVersion: 1,
+  fields: [
+    {
+      propertyPath,
+      defaultsPath: propertyPath,
+      envName,
+      kind: { type: 'number' },
+      required: true,
+      secret: false,
+      hasDefault: false,
+      optionalParents: [],
+    },
+  ],
+});
 
-function getConfigError(loadConfig: () => unknown): ConfigError {
-  try {
-    loadConfig();
-  } catch (error) {
-    expect(error).toBeInstanceOf(ConfigError);
-    return error as ConfigError;
+const getConfigError = (loadConfig: () => unknown): ConfigError => {
+  const { error } = attempt(loadConfig, (thrown) => thrown);
+
+  if (error instanceof ConfigError) {
+    return error;
   }
 
-  throw new Error('Expected configuration resolution to fail');
-}
+  throw new Error('Expected configuration resolution to fail', {
+    cause: error,
+  });
+};
 
-async function makeTempDirectory(): Promise<{
+const makeTempDirectory = async (): Promise<{
   path: string;
   [Symbol.dispose](): void;
-}> {
+}> => {
   const path = await mkdtemp(join(tmpdir(), 'typespun-runtime-'));
 
   return {
@@ -877,12 +906,15 @@ async function makeTempDirectory(): Promise<{
       rmSync(path, { recursive: true, force: true });
     },
   };
-}
+};
 
-function restoreEnvironment(key: string, previous: string | undefined): void {
+const restoreEnvironment = (
+  key: string,
+  previous: string | undefined,
+): void => {
   if (previous === undefined) {
     delete process.env[key];
   } else {
     process.env[key] = previous;
   }
-}
+};

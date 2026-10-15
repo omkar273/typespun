@@ -13,9 +13,9 @@ export interface EmitGeneratedModuleOptions {
   readonly fingerprint: string;
 }
 
-export function emitGeneratedModule(
+export const emitGeneratedModule = (
   options: EmitGeneratedModuleOptions,
-): string {
+): string => {
   const fields = options.fields.map(stripLocation);
   const schema = {
     compiledDefaults: options.compiledDefaults,
@@ -39,13 +39,13 @@ const schema = ${stableJson(schema, 2)} as const satisfies GeneratedSchema;
 
 export const loadConfig = createLoader<Config>(schema);
 `;
-}
+};
 
-export function relativeTypeImportSpecifier(
+export const relativeTypeImportSpecifier = (
   inputPath: string,
   outputPath: string,
   compilerOptions: ts.CompilerOptions,
-): string {
+): string => {
   const relativePath = relative(dirname(outputPath), inputPath);
   const withoutExtension = relativePath.slice(0, -extname(relativePath).length);
   const prefix = withoutExtension.startsWith('.')
@@ -53,25 +53,22 @@ export function relativeTypeImportSpecifier(
     : `./${withoutExtension}`;
 
   return `${prefix}${usesNodeEmittedSpecifiers(compilerOptions) ? emittedExtension(inputPath) : ''}`;
-}
+};
 
-function stripLocation(field: FieldIR): FieldSchema {
+const stripLocation = (field: FieldIR): FieldSchema => {
   const { location: _location, ...schemaField } = field;
   return schemaField;
-}
+};
 
-function usesNodeEmittedSpecifiers(options: ts.CompilerOptions): boolean {
-  return (
-    options.moduleResolution === ts.ModuleResolutionKind.Node16 ||
-    options.moduleResolution === ts.ModuleResolutionKind.NodeNext ||
-    options.moduleResolution === ts.ModuleResolutionKind.Bundler ||
-    (options.moduleResolution === undefined &&
-      (options.module === ts.ModuleKind.Node16 ||
-        options.module === ts.ModuleKind.NodeNext))
-  );
-}
+const usesNodeEmittedSpecifiers = (options: ts.CompilerOptions): boolean =>
+  options.moduleResolution === ts.ModuleResolutionKind.Node16 ||
+  options.moduleResolution === ts.ModuleResolutionKind.NodeNext ||
+  options.moduleResolution === ts.ModuleResolutionKind.Bundler ||
+  (options.moduleResolution === undefined &&
+    (options.module === ts.ModuleKind.Node16 ||
+      options.module === ts.ModuleKind.NodeNext));
 
-function emittedExtension(path: string): '.js' | '.mjs' | '.cjs' {
+const emittedExtension = (path: string): '.js' | '.mjs' | '.cjs' => {
   switch (extname(path)) {
     case '.mts':
       return '.mjs';
@@ -80,13 +77,12 @@ function emittedExtension(path: string): '.js' | '.mjs' | '.cjs' {
     default:
       return '.js';
   }
-}
+};
 
-function formatExportName(name: string): string {
-  return /^[$A-Z_a-z][$\w]*$/u.test(name) ? name : quote(name);
-}
+const formatExportName = (name: string): string =>
+  /^[$A-Z_a-z][$\w]*$/u.test(name) ? name : quote(name);
 
-function quote(value: string): string {
+const quote = (value: string): string => {
   const json = stableJson(value);
   return `'${json.slice(1, -1).replace(/'/g, "\\'").replace(/\\"/g, '"')}'`;
-}
+};

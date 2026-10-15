@@ -13,31 +13,29 @@
  */
 
 /** True when the host is Node on Windows; false in browsers and on POSIX. */
-function onWindows(): boolean {
+const onWindows = (): boolean => {
   const runtime = (globalThis as { process?: { platform?: string } }).process;
   return runtime?.platform === 'win32';
-}
+};
 
 /** The process working directory, or the root when there is no process. */
-function workingDirectory(): string {
+const workingDirectory = (): string => {
   const runtime = (globalThis as { process?: { cwd?: () => string } }).process;
   return normalizeSeparators(runtime?.cwd?.() ?? '/');
-}
+};
 
-function normalizeSeparators(value: string): string {
-  return onWindows() ? value.replace(/\\/g, '/') : value;
-}
+const normalizeSeparators = (value: string): string =>
+  onWindows() ? value.replace(/\\/g, '/') : value;
 
-function isAbsolute(value: string): boolean {
-  return value.startsWith('/') || /^[A-Za-z]:\//.test(value);
-}
+const isAbsolute = (value: string): boolean =>
+  value.startsWith('/') || /^[A-Za-z]:\//.test(value);
 
 /**
  * Splits a path into its root (`/`, or `C:/` on Windows) and its segments,
  * collapsing `.` and `..`. Relative inputs are rooted at the working directory,
  * matching `path.relative`'s own use of `path.resolve`.
  */
-function splitPath(value: string): { root: string; segments: string[] } {
+const splitPath = (value: string): { root: string; segments: string[] } => {
   const separated = normalizeSeparators(value);
   const rooted = isAbsolute(separated)
     ? separated
@@ -45,54 +43,62 @@ function splitPath(value: string): { root: string; segments: string[] } {
   const drive = /^[A-Za-z]:\//.exec(rooted);
   const root = drive === null ? '/' : drive[0];
   const segments: string[] = [];
+
   for (const segment of rooted.slice(root.length).split('/')) {
     if (segment === '' || segment === '.') continue;
+
     if (segment === '..') {
       segments.pop();
       continue;
     }
+
     segments.push(segment);
   }
+
   return { root, segments };
-}
+};
 
 /** Equivalent of `path.dirname`, always returning `/` separators. */
-export function dirname(value: string): string {
+export const dirname = (value: string): string => {
   const separated = normalizeSeparators(value);
   const index = separated.lastIndexOf('/');
   if (index < 0) return '.';
   if (index === 0) return '/';
   return separated.slice(0, index);
-}
+};
 
 /** Equivalent of `path.extname` for the file extensions the emitter sees. */
-export function extname(value: string): string {
+export const extname = (value: string): string => {
   const separated = normalizeSeparators(value);
   const base = separated.slice(separated.lastIndexOf('/') + 1);
   const index = base.lastIndexOf('.');
   return index <= 0 ? '' : base.slice(index);
-}
+};
 
 /** Equivalent of `path.relative`, always returning `/` separators. */
-export function relative(from: string, to: string): string {
+export const relative = (from: string, to: string): string => {
   const origin = splitPath(from);
   const target = splitPath(to);
+
   if (origin.root !== target.root) {
     // Distinct Windows drives: no relative path exists, so `node:path` returns
     // the absolute target and so do we.
     return `${target.root}${target.segments.join('/')}`;
   }
+
+  const comparable = Math.min(origin.segments.length, target.segments.length);
   let shared = 0;
+
   while (
-    shared < origin.segments.length &&
-    shared < target.segments.length &&
+    shared < comparable &&
     origin.segments[shared] === target.segments[shared]
   ) {
     shared++;
   }
+
   const ascent = Array.from(
     { length: origin.segments.length - shared },
     () => '..',
   );
   return [...ascent, ...target.segments.slice(shared)].join('/');
-}
+};
