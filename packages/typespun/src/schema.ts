@@ -1,3 +1,5 @@
+import { attempt } from './runtime/attempt.js';
+
 export type FieldKind =
   | { type: 'string' }
   | { type: 'number' }
@@ -62,53 +64,70 @@ export class ConfigError extends Error {
   }
 }
 
-export function validateTypedValue(
+const isArrayElement = (
+  element: 'string' | 'number' | 'boolean',
+  value: unknown,
+): boolean =>
+  element === 'number' ? Number.isFinite(value) : typeof value === element;
+
+const isArrayOf = (
+  element: 'string' | 'number' | 'boolean',
+  value: unknown,
+): boolean => {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      return false;
+    }
+
+    if (!isArrayElement(element, value[index])) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const isEnumValue = (values: readonly string[], value: unknown): boolean => {
+  if (typeof value !== 'string' || value === '') {
+    return false;
+  }
+
+  return values.includes(value);
+};
+
+// oxlint-disable-next-line typescript/consistent-return -- the switch is exhaustive; switch-exhaustiveness-check guards it
+export const validateTypedValue = (
   kind: FieldKind,
   value: unknown,
-): string | undefined {
+): string | undefined => {
   switch (kind.type) {
     case 'string':
       return typeof value === 'string' ? undefined : 'Expected a string';
     case 'number':
-      return typeof value === 'number' && Number.isFinite(value)
-        ? undefined
-        : 'Expected a finite number';
+      return Number.isFinite(value) ? undefined : 'Expected a finite number';
     case 'boolean':
       return typeof value === 'boolean' ? undefined : 'Expected a boolean';
     case 'enum':
-      return typeof value === 'string' &&
-        value !== '' &&
-        kind.values.includes(value)
+      return isEnumValue(kind.values, value)
         ? undefined
         : `Expected one of: ${kind.values.join(', ')}`;
     case 'array':
-      if (!Array.isArray(value)) {
-        return `Expected an array of ${kind.element}`;
-      }
-
-      for (let index = 0; index < value.length; index += 1) {
-        if (
-          !Object.hasOwn(value, index) ||
-          !isArrayElement(kind.element, value[index])
-        ) {
-          return `Expected an array of ${kind.element}`;
-        }
-      }
-
-      return undefined;
+      return isArrayOf(kind.element, value)
+        ? undefined
+        : `Expected an array of ${kind.element}`;
   }
-}
+};
 
-function isArrayElement(
-  element: 'string' | 'number' | 'boolean',
-  value: unknown,
-): boolean {
-  if (element === 'number') {
-    return typeof value === 'number' && Number.isFinite(value);
-  }
-
-  return typeof value === element;
-}
+// JSON.stringify returns undefined for functions and symbols and throws on cyclic
+// input. A formatter that throws while it reports an error is the worst failure.
+const formatReceived = (value: unknown): string => {
+  const json = attempt((): string | undefined => JSON.stringify(value));
+  return json.data ?? String(value);
+};
 
 /**
  * Renders a {@link ConfigError} as indented, human-readable lines suitable for
@@ -132,31 +151,21 @@ function isArrayElement(
  * }
  * ```
  */
-export function formatConfigError(
+export const formatConfigError = (
   error: ConfigError,
   options: { readonly heading?: string } = {},
-): string {
+): string => {
   const heading = options.heading ?? 'Configuration validation failed';
   const lines: string[] = [heading];
 
   for (const issue of error.issues) {
     const where = issue.envKey === undefined ? '' : ` (${issue.envKey})`;
     lines.push(`  ${issue.path}${where}: ${issue.message}`);
+
     if (issue.received !== undefined) {
       lines.push(`    received: ${formatReceived(issue.received)}`);
     }
   }
 
   return lines.join('\n');
-}
-
-function formatReceived(value: unknown): string {
-  // JSON.stringify returns undefined for functions and symbols, and throws on
-  // cyclic input. Neither should reach here, but a formatter that throws while
-  // reporting an error is the worst possible failure mode.
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
+};

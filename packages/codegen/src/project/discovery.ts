@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { attempt } from '../internal/attempt.js';
 
 export const CONVENTIONAL_INPUTS = [
   'src/config.ts',
@@ -26,24 +27,41 @@ export class ProjectDiscoveryError extends Error {
   }
 }
 
-export function discoverInputPath(projectDirectory: string): string {
+const isExistingFile = (path: string): boolean => {
+  const found = attempt(() => existsSync(path) && statSync(path).isFile());
+
+  return found.ok && found.data;
+};
+
+const findExistingCandidates = (
+  projectDirectory: string,
+  candidates: readonly string[],
+): string[] => {
+  const root = resolve(projectDirectory);
+  return candidates
+    .map((candidate) => join(root, candidate))
+    .filter((candidate) => isExistingFile(candidate));
+};
+
+export const discoverInputPath = (projectDirectory: string): string => {
   const candidates = findExistingCandidates(
     projectDirectory,
     CONVENTIONAL_INPUTS,
   );
+  const [input, ...others] = candidates;
 
-  if (candidates.length !== 1) {
+  if (input === undefined || others.length > 0) {
     throw new ProjectDiscoveryError(
       `Expected exactly one conventional input, found ${candidates.length}.`,
     );
   }
 
-  return candidates[0]!;
-}
+  return input;
+};
 
-export function discoverDefaultsPath(
+export const discoverDefaultsPath = (
   projectDirectory: string,
-): string | undefined {
+): string | undefined => {
   const candidates = findExistingCandidates(
     projectDirectory,
     CONVENTIONAL_DEFAULTS,
@@ -56,39 +74,17 @@ export function discoverDefaultsPath(
   }
 
   return candidates[0];
-}
+};
 
-export function findNearestTsconfig(inputPath: string): string | undefined {
-  let directory = dirname(resolve(inputPath));
+export const findNearestTsconfig = (inputPath: string): string | undefined => {
+  const directory = dirname(resolve(inputPath));
+  const candidate = join(directory, 'tsconfig.json');
 
-  while (true) {
-    const candidate = join(directory, 'tsconfig.json');
-    if (isFile(candidate)) {
-      return candidate;
-    }
-
-    const parent = dirname(directory);
-    if (parent === directory) {
-      return undefined;
-    }
-    directory = parent;
+  if (isExistingFile(candidate)) {
+    return candidate;
   }
-}
 
-function findExistingCandidates(
-  projectDirectory: string,
-  candidates: readonly string[],
-): string[] {
-  const root = resolve(projectDirectory);
-  return candidates
-    .map((candidate) => join(root, candidate))
-    .filter((candidate) => isFile(candidate));
-}
-
-function isFile(path: string): boolean {
-  try {
-    return existsSync(path) && statSync(path).isFile();
-  } catch {
-    return false;
-  }
-}
+  return dirname(directory) === directory
+    ? undefined
+    : findNearestTsconfig(directory);
+};

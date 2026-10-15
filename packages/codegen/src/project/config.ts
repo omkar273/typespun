@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
 import ts from 'typescript';
 import type { SecretDefaultsPolicy, UnknownKeysPolicy } from '../contracts.js';
+import { attempt } from '../internal/attempt.js';
 import {
   discoverDefaultsPath,
   discoverInputPath,
@@ -39,16 +40,13 @@ interface RawDefaultsConfig {
 }
 
 const OUTPUT_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
-const UNKNOWN_KEYS_POLICIES = new Set<UnknownKeysPolicy>([
+const UNKNOWN_KEYS_POLICIES: ReadonlySet<unknown> = new Set<UnknownKeysPolicy>([
   'error',
   'warn',
   'ignore',
 ]);
-const SECRET_DEFAULTS_POLICIES = new Set<SecretDefaultsPolicy>([
-  'warn',
-  'allow',
-  'error',
-]);
+const SECRET_DEFAULTS_POLICIES: ReadonlySet<unknown> =
+  new Set<SecretDefaultsPolicy>(['warn', 'allow', 'error']);
 
 export class ProjectConfigError extends Error {
   constructor(message: string) {
@@ -57,30 +55,35 @@ export class ProjectConfigError extends Error {
   }
 }
 
-export function loadProjectConfig(
+// An empty string selects the default, the same as an omitted value.
+const hasText = (value: string | undefined): value is string =>
+  value !== undefined && value !== '';
+
+export const loadProjectConfig = (
   options: LoadProjectConfigOptions,
-): ProjectConfigResult {
+): ProjectConfigResult => {
   const projectDirectory = resolve(options.projectDirectory);
-  const configPath = options.configPath
+  const configPath = hasText(options.configPath)
     ? resolve(projectDirectory, options.configPath)
     : resolve(projectDirectory, 'typespun.json');
   const hasConfig = options.configPath !== undefined || existsSync(configPath);
   const config = hasConfig ? readProjectConfig(configPath) : {};
   const configDirectory = hasConfig ? dirname(configPath) : projectDirectory;
 
-  const inputPath = config.input
+  const inputPath = hasText(config.input)
     ? resolve(configDirectory, config.input)
     : discoverInputPath(configDirectory);
   validateInputExtension(inputPath);
 
-  const outputPath = config.output
+  const outputPath = hasText(config.output)
     ? resolve(configDirectory, config.output)
     : resolve(configDirectory, `src/generated/typespun${extname(inputPath)}`);
   validateOutputExtension(outputPath);
 
-  const tsconfigPath = config.tsconfig
+  const tsconfigPath = hasText(config.tsconfig)
     ? resolve(configDirectory, config.tsconfig)
     : findNearestTsconfig(inputPath);
+
   if (tsconfigPath === undefined) {
     throw new Error(`Could not find tsconfig.json for ${inputPath}`);
   }
@@ -98,22 +101,20 @@ export function loadProjectConfig(
     unknownKeys: defaults.unknownKeys,
     secretDefaults: config.secretDefaults ?? 'warn',
   };
-}
+};
 
-function readProjectConfig(path: string): RawProjectConfig {
-  let value: unknown;
-  try {
-    const parsed = ts.parseConfigFileTextToJson(
-      path,
-      readFileSync(path, 'utf8'),
-    );
-    if (parsed.error !== undefined) throw new Error('invalid JSON');
-    value = parsed.config;
-  } catch {
+const readProjectConfig = (path: string): RawProjectConfig => {
+  const parsed = attempt(() =>
+    ts.parseConfigFileTextToJson(path, readFileSync(path, 'utf8')),
+  );
+
+  if (!parsed.ok || parsed.data.error !== undefined) {
     throw new ProjectConfigError(
       'Could not parse typespun.json as JSON with comments',
     );
   }
+
+  const value: unknown = parsed.data.config;
 
   if (!isRecord(value)) {
     throw new ProjectConfigError('typespun.json must contain an object');
@@ -144,13 +145,14 @@ function readProjectConfig(path: string): RawProjectConfig {
     validateDefaultsConfig(value.defaults);
   }
 
-  return value as RawProjectConfig;
-}
+  return value;
+};
 
-function validateDefaultsConfig(value: unknown): void {
+const validateDefaultsConfig = (value: unknown): void => {
   if (typeof value === 'string') {
     return;
   }
+
   if (!isRecord(value)) {
     throw new ProjectConfigError(
       'typespun.json.defaults must be a string or object',
@@ -160,12 +162,12 @@ function validateDefaultsConfig(value: unknown): void {
   rejectUnknownKeys(value, ['path', 'unknownKeys'], 'defaults');
   assertOptionalString(value, 'path', 'typespun.json.defaults.path');
   assertUnknownKeysPolicy(value.unknownKeys);
-}
+};
 
-function resolveDefaults(
+const resolveDefaults = (
   defaults: RawProjectConfig['defaults'],
   configDirectory: string,
-): { path?: string; unknownKeys: UnknownKeysPolicy } {
+): { path?: string; unknownKeys: UnknownKeysPolicy } => {
   if (typeof defaults === 'string') {
     return { path: resolve(configDirectory, defaults), unknownKeys: 'error' };
   }
@@ -181,68 +183,61 @@ function resolveDefaults(
   return path === undefined
     ? { unknownKeys: defaults?.unknownKeys ?? 'error' }
     : { path, unknownKeys: defaults?.unknownKeys ?? 'error' };
-}
+};
 
-function rejectUnknownKeys(
+const rejectUnknownKeys = (
   value: Record<string, unknown>,
   allowedKeys: readonly string[],
   context: string,
-): void {
+): void => {
   for (const key of Object.keys(value)) {
     if (!allowedKeys.includes(key)) {
       throw new ProjectConfigError(`Unknown ${context} key: ${key}`);
     }
   }
-}
+};
 
-function assertOptionalString(
+const assertOptionalString = (
   value: Record<string, unknown>,
   key: string,
   context: string,
-): void {
+): void => {
   if (value[key] !== undefined && typeof value[key] !== 'string') {
     throw new ProjectConfigError(`${context} must be a string`);
   }
-}
+};
 
-function assertUnknownKeysPolicy(value: unknown): void {
-  if (
-    value !== undefined &&
-    !UNKNOWN_KEYS_POLICIES.has(value as UnknownKeysPolicy)
-  ) {
+const assertUnknownKeysPolicy = (value: unknown): void => {
+  if (value !== undefined && !UNKNOWN_KEYS_POLICIES.has(value)) {
     throw new ProjectConfigError(
       'typespun.json.defaults.unknownKeys must be error, warn, or ignore',
     );
   }
-}
+};
 
-function assertSecretDefaultsPolicy(value: unknown): void {
-  if (
-    value !== undefined &&
-    !SECRET_DEFAULTS_POLICIES.has(value as SecretDefaultsPolicy)
-  ) {
+const assertSecretDefaultsPolicy = (value: unknown): void => {
+  if (value !== undefined && !SECRET_DEFAULTS_POLICIES.has(value)) {
     throw new ProjectConfigError(
       'typespun.json.secretDefaults must be warn, allow, or error',
     );
   }
-}
+};
 
-function validateInputExtension(path: string): void {
+const validateInputExtension = (path: string): void => {
   if (!OUTPUT_EXTENSIONS.has(extname(path))) {
     throw new ProjectConfigError(
       'input must use a .ts, .mts, or .cts extension',
     );
   }
-}
+};
 
-function validateOutputExtension(path: string): void {
+const validateOutputExtension = (path: string): void => {
   if (!OUTPUT_EXTENSIONS.has(extname(path))) {
     throw new ProjectConfigError(
       'output must use a .ts, .mts, or .cts extension',
     );
   }
-}
+};
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);

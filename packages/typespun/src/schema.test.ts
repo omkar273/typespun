@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ConfigError, formatConfigError } from './schema.js';
-import { validateTypedValue } from './generated.js';
-import type { FieldKind } from './generated.js';
+import { type FieldKind, validateTypedValue } from './generated.js';
 
 describe('validateTypedValue', () => {
   test.each([
@@ -18,7 +17,10 @@ describe('validateTypedValue', () => {
       undefined,
     ],
     [{ type: 'enum', values: ['development', 'production'] }, 'test', 'one of'],
+    [{ type: 'enum', values: ['', 'production'] }, '', 'one of'],
+    [{ type: 'enum', values: ['production'] }, 1, 'one of'],
     [{ type: 'array', element: 'string' }, ['one', 'two'], undefined],
+    [{ type: 'array', element: 'string' }, 'one,two', 'an array of string'],
     [{ type: 'array', element: 'number' }, [1, 2.5], undefined],
     [{ type: 'array', element: 'boolean' }, [true, false], undefined],
     [{ type: 'array', element: 'number' }, [1, 'two'], 'number'],

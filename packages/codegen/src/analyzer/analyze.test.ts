@@ -5,25 +5,23 @@ import { analyzeProgram } from './analyze.js';
 
 const inputPath = path.resolve('packages/codegen/config.fixture.ts');
 
-function analyze(
+const analyze = (
   source: string,
   envPrefix = '',
   extra: Record<string, string> = {},
-) {
-  return analyzeProgram(
+) =>
+  analyzeProgram(
     createTestProgram({ ...extra, [inputPath]: source }),
     inputPath,
     envPrefix,
   );
-}
 
-function diagnosticSummary(source: string) {
-  return analyze(source).diagnostics.map(({ code, location }) => ({
+const diagnosticSummary = (source: string) =>
+  analyze(source).diagnostics.map(({ code, location }) => ({
     code,
     line: location.line,
     column: location.column,
   }));
-}
 
 test('interface flattens imported aliases, inheritance and separate annotations', () => {
   const program = createTestProgram({
@@ -251,6 +249,32 @@ test('decorated class ignores unrelated same-name decorators', () => {
 @Config()
 export class Settings { port = 1; }`),
   ).toEqual([{ code: 'root_count', line: 1, column: 1 }]);
+});
+
+test('decorated class ignores unrelated JSDoc tags and non-annotation typespun exports', () => {
+  const result = analyze(`import { Config, formatConfigError } from 'typespun';
+@Config()
+export class Settings {
+  /** @deprecated use another port */
+  @formatConfigError()
+  port = 1;
+}`);
+  expect(result.diagnostics).toEqual([]);
+  expect(result.fields.map(({ envName }) => envName)).toEqual(['PORT']);
+});
+
+test('decorated class reports Key without an argument and ignores bare or unresolved decorators', () => {
+  expect(
+    diagnosticSummary(`import { Config, Ignore, Key } from 'typespun';
+@Config()
+export class Settings {
+  @Key()
+  port = 1;
+  @Ignore
+  @Missing()
+  host = 'localhost';
+}`),
+  ).toEqual([{ code: 'invalid_annotation', line: 4, column: 3 }]);
 });
 
 test.each([

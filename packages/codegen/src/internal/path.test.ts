@@ -36,21 +36,16 @@ describe('dirname', () => {
     );
   });
 
-  test('returns "." for a single-segment path with no separator', () => {
-    expect(dirname('config.ts')).toBe('.');
-  });
+  test('returns "." for a single-segment path with no separator', () =>
+    expect(dirname('config.ts')).toBe('.'));
 
-  test('returns "/" for a file sitting directly at the root', () => {
-    expect(dirname('/config.ts')).toBe('/');
-  });
+  test('returns "/" for a file sitting directly at the root', () =>
+    expect(dirname('/config.ts')).toBe('/'));
 
-  test('returns "/" for the root itself', () => {
-    expect(dirname('/')).toBe('/');
-  });
+  test('returns "/" for the root itself', () => expect(dirname('/')).toBe('/'));
 
-  test('keeps a relative prefix instead of resolving it', () => {
-    expect(dirname('./src/config.ts')).toBe('./src');
-  });
+  test('keeps a relative prefix instead of resolving it', () =>
+    expect(dirname('./src/config.ts')).toBe('./src'));
 
   test('treats a trailing separator as the end of the path, so the directory is its own parent', () => {
     // Intentional difference from `node:path`, which strips the trailing
@@ -60,54 +55,46 @@ describe('dirname', () => {
     expect(posix.dirname('/project/src/')).toBe('/project');
   });
 
-  test('treats a backslash as an ordinary filename character on POSIX', () => {
-    expect(dirname('/project/src/od\\d.ts')).toBe('/project/src');
-  });
+  test('treats a backslash as an ordinary filename character on POSIX', () =>
+    expect(dirname('/project/src/od\\d.ts')).toBe('/project/src'));
 
-  test.each(posixPaths)('agrees with node:path/posix for %s', (path) => {
-    expect(dirname(path)).toBe(posix.dirname(path));
-  });
+  test.each(posixPaths)('agrees with node:path/posix for %s', (path) =>
+    expect(dirname(path)).toBe(posix.dirname(path)),
+  );
 });
 
 describe('extname', () => {
-  test('returns the extension of an ordinary file', () => {
-    expect(extname('/project/src/config.ts')).toBe('.ts');
-  });
+  test('returns the extension of an ordinary file', () =>
+    expect(extname('/project/src/config.ts')).toBe('.ts'));
 
-  test('returns an empty extension when the basename has no dot', () => {
-    expect(extname('/project/src/LICENSE')).toBe('');
-  });
+  test('returns an empty extension when the basename has no dot', () =>
+    expect(extname('/project/src/LICENSE')).toBe(''));
 
   test('returns an empty extension for a dotfile, whose dot starts the name', () => {
     expect(extname('/project/.gitignore')).toBe('');
     expect(extname('.gitignore')).toBe('');
   });
 
-  test('returns only the final extension when the name has several dots', () => {
-    expect(extname('/project/archive.tar.gz')).toBe('.gz');
-  });
+  test('returns only the final extension when the name has several dots', () =>
+    expect(extname('/project/archive.tar.gz')).toBe('.gz'));
 
-  test('ignores dots that belong to a parent directory segment', () => {
-    expect(extname('/project/my.dir/plain')).toBe('');
-  });
+  test('ignores dots that belong to a parent directory segment', () =>
+    expect(extname('/project/my.dir/plain')).toBe(''));
 
-  test('returns a bare dot for a name that ends in one', () => {
-    expect(extname('config.')).toBe('.');
-  });
+  test('returns a bare dot for a name that ends in one', () =>
+    expect(extname('config.')).toBe('.'));
 
-  test.each(posixPaths)('agrees with node:path/posix for %s', (path) => {
-    expect(extname(path)).toBe(posix.extname(path));
-  });
+  test.each(posixPaths)('agrees with node:path/posix for %s', (path) =>
+    expect(extname(path)).toBe(posix.extname(path)),
+  );
 });
 
 describe('relative', () => {
-  test('returns an empty path between identical paths', () => {
-    expect(relative('/project/src', '/project/src')).toBe('');
-  });
+  test('returns an empty path between identical paths', () =>
+    expect(relative('/project/src', '/project/src')).toBe(''));
 
-  test('steps out of the source and into a sibling in the same directory', () => {
-    expect(relative('/project/src/a', '/project/src/b')).toBe('../b');
-  });
+  test('steps out of the source and into a sibling in the same directory', () =>
+    expect(relative('/project/src/a', '/project/src/b')).toBe('../b'));
 
   test('descends without any leading dots when the target is below the source', () => {
     expect(relative('/project', '/project/src/generated/typespun.ts')).toBe(
@@ -115,9 +102,8 @@ describe('relative', () => {
     );
   });
 
-  test('ascends with one ".." per level when the target is above the source', () => {
-    expect(relative('/project/src/generated', '/project')).toBe('../..');
-  });
+  test('ascends with one ".." per level when the target is above the source', () =>
+    expect(relative('/project/src/generated', '/project')).toBe('../..'));
 
   test('ascends to the shared ancestor and then descends to the target', () => {
     expect(relative('/project/src/generated', '/project/types/env.d.ts')).toBe(
@@ -125,9 +111,8 @@ describe('relative', () => {
     );
   });
 
-  test('walks all the way up to the root when nothing but the root is shared', () => {
-    expect(relative('/a/b/c', '/x/y')).toBe('../../../x/y');
-  });
+  test('walks all the way up to the root when nothing but the root is shared', () =>
+    expect(relative('/a/b/c', '/x/y')).toBe('../../../x/y'));
 
   test('collapses "." and ".." segments in either argument before comparing', () => {
     expect(relative('/project/./src', '/project/src/./generated')).toBe(
@@ -139,9 +124,8 @@ describe('relative', () => {
     expect(relative('/project/src/..', '/project/./src/a.ts')).toBe('src/a.ts');
   });
 
-  test('pops harmlessly at the root when ".." segments outrun the path', () => {
-    expect(relative('/../..', '/project')).toBe('project');
-  });
+  test('pops harmlessly at the root when ".." segments outrun the path', () =>
+    expect(relative('/../..', '/project')).toBe('project'));
 
   test('resolves relative arguments against the working directory', () => {
     const cwd = process.cwd();
@@ -176,7 +160,7 @@ describe('relative', () => {
 
   test.each(
     posixPaths.flatMap((from) => posixPaths.map((to) => [from, to] as const)),
-  )('agrees with node:path/posix from %s to %s', (from, to) => {
-    expect(relative(from, to)).toBe(posix.relative(from, to));
-  });
+  )('agrees with node:path/posix from %s to %s', (from, to) =>
+    expect(relative(from, to)).toBe(posix.relative(from, to)),
+  );
 });

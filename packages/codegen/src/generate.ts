@@ -21,6 +21,7 @@ import {
   createFingerprint,
   type FingerprintInput,
 } from './emitter/fingerprint.js';
+import { attempt } from './internal/attempt.js';
 import {
   loadProjectConfig,
   type ProjectConfigResult,
@@ -65,9 +66,9 @@ export interface GenerateResult {
   readonly diagnostics: readonly GenerateDiagnostic[];
 }
 
-export async function generateProject(
+export const generateProject = async (
   options: GenerateProjectOptions,
-): Promise<GenerateResult> {
+): Promise<GenerateResult> => {
   const projectDirectory = resolve(options.projectDirectory ?? process.cwd());
   const config = loadProjectConfig({
     projectDirectory,
@@ -75,7 +76,13 @@ export async function generateProject(
       ? {}
       : { configPath: options.configPath }),
   });
-  if (await referToSameFile(config.inputPath, config.outputPath)) {
+
+  const overlapping = await referToSameFile(
+    config.inputPath,
+    config.outputPath,
+  );
+
+  if (overlapping) {
     return failedResult(config.outputPath, [
       {
         code: 'overlapping_paths',
@@ -84,7 +91,9 @@ export async function generateProject(
       },
     ]);
   }
+
   const programResult = createProjectProgram(config);
+
   if (programResult.diagnostics.length > 0) {
     return failedResult(config.outputPath, programResult.diagnostics);
   }
@@ -94,21 +103,20 @@ export async function generateProject(
     config.inputPath,
     config.envPrefix,
   );
-  if (
-    analysis.diagnostics.length > 0 ||
-    analysis.rootName === undefined ||
-    analysis.rootExport === undefined
-  ) {
+
+  const hasRoot =
+    analysis.rootName !== undefined && analysis.rootExport !== undefined;
+
+  if (analysis.diagnostics.length > 0 || !hasRoot) {
     return failedResult(config.outputPath, analysis.diagnostics);
   }
 
-  const defaultsDocument =
-    config.defaultsPath === undefined
-      ? { path: config.inputPath, content: '{}' }
-      : await readDefaults(config.defaultsPath);
+  const defaultsDocument = await readDefaults(config);
+
   if ('diagnostic' in defaultsDocument) {
     return failedResult(config.outputPath, [defaultsDocument.diagnostic]);
   }
+
   const defaults = compileDefaults(
     {
       path: defaultsDocument.path,
@@ -120,6 +128,7 @@ export async function generateProject(
       secretDefaults: config.secretDefaults,
     },
   );
+
   if (defaults.errors.length > 0) {
     return failedResult(config.outputPath, defaults.errors, defaults.warnings);
   }
@@ -159,6 +168,7 @@ export async function generateProject(
       diagnostics: [],
     };
   }
+
   if (options.mode === 'check') {
     return {
       status: 'stale',
@@ -175,36 +185,41 @@ export async function generateProject(
     warnings: defaults.warnings,
     diagnostics: [],
   };
-}
+};
 
-export function createGenerationFingerprint(
+export const createGenerationFingerprint = (
   input: Omit<FingerprintInput, 'generatorVersion'>,
   packageJsonUrl: URL = PACKAGE_JSON_URL,
-): string {
+): string => {
   const manifest: unknown = JSON.parse(readFileSync(packageJsonUrl, 'utf8'));
-  if (
-    typeof manifest !== 'object' ||
-    manifest === null ||
-    !('version' in manifest) ||
-    typeof manifest.version !== 'string' ||
-    manifest.version.length === 0
-  ) {
+  const isObject = typeof manifest === 'object' && manifest !== null;
+  const version =
+    isObject && 'version' in manifest ? manifest.version : undefined;
+
+  if (typeof version !== 'string' || version.length === 0) {
     throw new Error('typespun-codegen package version is missing');
   }
-  return createFingerprint({ ...input, generatorVersion: manifest.version });
-}
 
-function createProjectProgram(config: ProjectConfigResult): {
+  return createFingerprint({ ...input, generatorVersion: version });
+};
+
+const createProjectProgram = (
+  config: ProjectConfigResult,
+): {
   program: ts.Program;
   diagnostics: Diagnostic[];
-} {
-  const loaded = ts.readConfigFile(config.tsconfigPath, ts.sys.readFile);
+} => {
+  const loaded = ts.readConfigFile(config.tsconfigPath, (path) =>
+    ts.sys.readFile(path),
+  );
+
   if (loaded.error !== undefined) {
     return {
       program: ts.createProgram([], {}),
       diagnostics: [typescriptConfigDiagnostic(config.tsconfigPath)],
     };
   }
+
   const parsed = ts.parseJsonConfigFileContent(
     loaded.config,
     ts.sys,
@@ -212,12 +227,14 @@ function createProjectProgram(config: ProjectConfigResult): {
     undefined,
     config.tsconfigPath,
   );
+
   if (parsed.errors.length > 0) {
     return {
       program: ts.createProgram([], parsed.options),
       diagnostics: [typescriptConfigDiagnostic(config.tsconfigPath)],
     };
   }
+
   const rootNames = Array.from(
     new Set([
       ...parsed.fileNames.map((path) => resolve(path)),
@@ -228,68 +245,87 @@ function createProjectProgram(config: ProjectConfigResult): {
     program: ts.createProgram(rootNames, parsed.options),
     diagnostics: [],
   };
-}
+};
 
-function typescriptConfigDiagnostic(path: string): Diagnostic {
-  return {
-    code: 'typescript_config',
-    message: 'The TypeScript project configuration could not be loaded.',
-    location: { file: path, line: 1, column: 1 },
-  };
-}
+const typescriptConfigDiagnostic = (path: string): Diagnostic => ({
+  code: 'typescript_config',
+  message: 'The TypeScript project configuration could not be loaded.',
+  location: { file: path, line: 1, column: 1 },
+});
 
-async function readDefaults(
-  path: string,
-): Promise<
+const readDefaults = async ({
+  defaultsPath,
+  inputPath,
+}: ProjectConfigResult): Promise<
   { path: string; content: string } | { diagnostic: GenerationIoDiagnostic }
-> {
-  try {
-    return { path, content: await readFile(path, 'utf8') };
-  } catch {
-    return {
-      diagnostic: {
-        code: 'defaults_read_failed',
-        file: path,
-        path: '',
-        message: 'The configured defaults file could not be read.',
-      },
-    };
+> => {
+  if (defaultsPath === undefined) {
+    return { path: inputPath, content: '{}' };
   }
-}
 
-async function readExisting(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8');
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') return undefined;
-    throw error;
+  const read = await attempt(() => readFile(defaultsPath, 'utf8'));
+
+  if (read.ok) {
+    return { path: defaultsPath, content: read.data };
   }
-}
 
-export async function atomicWrite(
+  return {
+    diagnostic: {
+      code: 'defaults_read_failed',
+      file: defaultsPath,
+      path: '',
+      message: 'The configured defaults file could not be read.',
+    },
+  };
+};
+
+const readExisting = async (path: string): Promise<string | undefined> => {
+  const read = await attempt(
+    () => readFile(path, 'utf8'),
+    (thrown) => thrown,
+  );
+
+  if (read.ok) {
+    return read.data;
+  }
+
+  if (isNodeError(read.error) && read.error.code === 'ENOENT') return undefined;
+  throw read.error;
+};
+
+export const atomicWrite = async (
   path: string,
   contents: string,
   temporaryPathForAttempt: (attempt: number) => string = (_attempt) =>
     `${dirname(path)}/.typespun.${randomUUID()}.tmp`,
-): Promise<void> {
+): Promise<void> => {
   await mkdir(dirname(path), { recursive: true });
   let temporaryPath: string | undefined;
   let handle: Awaited<ReturnType<typeof open>> | undefined;
-  for (let attempt = 0; attempt < TEMPORARY_ATTEMPTS; attempt++) {
-    const candidate = temporaryPathForAttempt(attempt);
-    try {
-      handle = await open(candidate, 'wx');
+
+  for (let index = 0; index < TEMPORARY_ATTEMPTS; index++) {
+    const candidate = temporaryPathForAttempt(index);
+    const opened = await attempt(
+      () => open(candidate, 'wx'),
+      (thrown) => thrown,
+    );
+
+    if (opened.ok) {
+      handle = opened.data;
       temporaryPath = candidate;
       break;
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'EEXIST') continue;
-      throw error;
     }
+
+    if (isNodeError(opened.error) && opened.error.code === 'EEXIST') continue;
+    throw opened.error;
   }
+
   if (handle === undefined || temporaryPath === undefined) {
     throw new Error('Could not reserve a temporary generated-output file.');
   }
+
   let renamed = false;
+
   try {
     await handle.writeFile(contents, 'utf8');
     await handle.sync();
@@ -300,90 +336,109 @@ export async function atomicWrite(
   } finally {
     /* v8 ignore next 2 -- these catch handlers only run if the cleanup itself
        fails, which cannot be provoked without faulting the filesystem. */
-    await handle?.close().catch(() => undefined);
-    if (!renamed) await unlink(temporaryPath).catch(() => undefined);
+    await handle?.close().catch(() => {});
+    if (!renamed) await unlink(temporaryPath).catch(() => {});
   }
-}
+};
 
-function failedResult(
+const failedResult = (
   outputPath: string,
   diagnostics: readonly GenerateDiagnostic[],
   warnings: readonly GenerateDiagnostic[] = [],
-): GenerateResult {
-  return { status: 'unchanged', outputPath, warnings, diagnostics };
-}
+): GenerateResult => ({
+  status: 'unchanged',
+  outputPath,
+  warnings,
+  diagnostics,
+});
 
-function normalizeConfiguration(config: ProjectConfigResult): unknown {
-  return {
-    input: portableRelative(config.configDirectory, config.inputPath),
-    output: portableRelative(config.configDirectory, config.outputPath),
-    tsconfig: portableRelative(config.configDirectory, config.tsconfigPath),
-    ...(config.defaultsPath === undefined
-      ? {}
-      : {
-          defaults: portableRelative(
-            config.configDirectory,
-            config.defaultsPath,
-          ),
-        }),
-    ...(config.envPrefix === undefined ? {} : { envPrefix: config.envPrefix }),
-    unknownKeys: config.unknownKeys,
-    secretDefaults: config.secretDefaults,
-  };
-}
+const normalizeConfiguration = (config: ProjectConfigResult): unknown => ({
+  input: portableRelative(config.configDirectory, config.inputPath),
+  output: portableRelative(config.configDirectory, config.outputPath),
+  tsconfig: portableRelative(config.configDirectory, config.tsconfigPath),
+  ...(config.defaultsPath === undefined
+    ? {}
+    : {
+        defaults: portableRelative(config.configDirectory, config.defaultsPath),
+      }),
+  ...(config.envPrefix === undefined ? {} : { envPrefix: config.envPrefix }),
+  unknownKeys: config.unknownKeys,
+  secretDefaults: config.secretDefaults,
+});
 
-async function referToSameFile(
+const referToSameFile = async (
   first: string,
   second: string,
-): Promise<boolean> {
+): Promise<boolean> => {
   const [firstIdentity, secondIdentity] = await Promise.all([
     fileIdentity(first),
     fileIdentity(second),
   ]);
-  if (
-    firstIdentity.stat !== undefined &&
-    secondIdentity.stat !== undefined &&
-    firstIdentity.stat.dev === secondIdentity.stat.dev &&
-    firstIdentity.stat.ino === secondIdentity.stat.ino
-  ) {
-    return true;
-  }
-  return firstIdentity.canonicalPath === secondIdentity.canonicalPath;
-}
 
-async function fileIdentity(path: string): Promise<{
+  const firstStat = firstIdentity.stat;
+  const secondStat = secondIdentity.stat;
+  const sameCanonicalPath =
+    firstIdentity.canonicalPath === secondIdentity.canonicalPath;
+
+  if (firstStat === undefined || secondStat === undefined) {
+    return sameCanonicalPath;
+  }
+
+  const sameInode =
+    firstStat.dev === secondStat.dev && firstStat.ino === secondStat.ino;
+  return sameInode || sameCanonicalPath;
+};
+
+/** Resolves a missing path through its nearest existing ancestor. */
+const canonicalViaAncestor = async (
+  path: string,
+  ancestor: string,
+  remainder: readonly string[],
+): Promise<string> => {
+  const canonical = await attempt(() => realpath(ancestor));
+
+  if (canonical.ok) {
+    return resolve(canonical.data, ...remainder);
+  }
+
+  const parent = dirname(ancestor);
+
+  if (parent === ancestor) {
+    return resolve(path);
+  }
+
+  return canonicalViaAncestor(path, parent, [basename(ancestor), ...remainder]);
+};
+
+const fileIdentity = async (
+  path: string,
+): Promise<{
   canonicalPath: string;
   stat?: Awaited<ReturnType<typeof stat>>;
-}> {
-  try {
-    return { canonicalPath: await realpath(path), stat: await stat(path) };
-  } catch {
-    let ancestor = dirname(path);
-    const remainder = [basename(path)];
-    while (true) {
-      try {
-        return {
-          canonicalPath: resolve(await realpath(ancestor), ...remainder),
-        };
-      } catch {
-        const parent = dirname(ancestor);
-        if (parent === ancestor) return { canonicalPath: resolve(path) };
-        remainder.unshift(basename(ancestor));
-        ancestor = parent;
-      }
-    }
+}> => {
+  const existing = await attempt(async () => {
+    const canonicalPath = await realpath(path);
+    const stats = await stat(path);
+    return { canonicalPath, stat: stats };
+  });
+
+  if (existing.ok) {
+    return existing.data;
   }
-}
 
-function portableRelative(from: string, to: string): string {
-  return relative(from, to).split(sep).join('/');
-}
+  const canonicalPath = await canonicalViaAncestor(path, dirname(path), [
+    basename(path),
+  ]);
+  return { canonicalPath };
+};
 
-function withoutLocation(field: FieldIR): Omit<FieldIR, 'location'> {
+const portableRelative = (from: string, to: string): string =>
+  relative(from, to).split(sep).join('/');
+
+const withoutLocation = (field: FieldIR): Omit<FieldIR, 'location'> => {
   const { location: _location, ...portable } = field;
   return portable;
-}
+};
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
-}
+const isNodeError = (error: unknown): error is NodeJS.ErrnoException =>
+  error instanceof Error && 'code' in error;

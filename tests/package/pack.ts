@@ -11,7 +11,30 @@ export interface PackedArtifacts {
   readonly codegen: string;
 }
 
-export async function packArtifacts(): Promise<PackedArtifacts> {
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null;
+
+export const run = (
+  command: readonly [string, ...string[]],
+  cwd = workspaceRoot,
+): string => {
+  const [executable, ...args] = command;
+  const result = spawnSync(executable, args, {
+    cwd,
+    env: process.env,
+    encoding: 'utf8',
+  });
+
+  if (result.status !== 0) {
+    throw new Error(
+      `${command.join(' ')} failed (${result.status})\n${result.stdout}${result.stderr}`,
+    );
+  }
+
+  return result.stdout;
+};
+
+export const packArtifacts = async (): Promise<PackedArtifacts> => {
   const directory = await mkdtemp(join(tmpdir(), 'typespun-pack-'));
   const runtime = join(directory, 'typespun.tgz');
   const codegen = join(directory, 'typespun-codegen.tgz');
@@ -27,37 +50,29 @@ export async function packArtifacts(): Promise<PackedArtifacts> {
   );
 
   return { directory, runtime, codegen };
-}
+};
 
-export async function removePackedArtifacts(
+export const removePackedArtifacts = async (
   artifacts: PackedArtifacts | undefined,
-): Promise<void> {
+): Promise<void> => {
   if (artifacts !== undefined) {
     await rm(artifacts.directory, { recursive: true, force: true });
   }
-}
+};
 
-export function archiveEntries(path: string): readonly string[] {
-  return run(['tar', '-tzf', path]).trim().split('\n').filter(Boolean);
-}
+export const archiveEntries = (path: string): readonly string[] =>
+  run(['tar', '-tzf', path]).trim().split('\n').filter(Boolean);
 
-export function archivedPackageJson(
+export const archivedPackageJson = (
   path: string,
-): Readonly<Record<string, unknown>> {
-  return JSON.parse(run(['tar', '-xOzf', path, 'package/package.json']));
-}
+): Readonly<Record<string, unknown>> => {
+  const manifest: unknown = JSON.parse(
+    run(['tar', '-xOzf', path, 'package/package.json']),
+  );
 
-export function run(command: readonly string[], cwd = workspaceRoot): string {
-  const [executable, ...args] = command;
-  const result = spawnSync(executable!, args, {
-    cwd,
-    env: process.env,
-    encoding: 'utf8',
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `${command.join(' ')} failed (${result.status})\n${result.stdout}${result.stderr}`,
-    );
+  if (!isRecord(manifest)) {
+    throw new Error(`${path} does not contain a package.json object`);
   }
-  return result.stdout;
-}
+
+  return manifest;
+};

@@ -1,17 +1,19 @@
-import { ConfigError } from '../schema.js';
-import type {
-  ConfigIssue,
-  FieldSchema,
-  GeneratedSchema,
-  LoadConfigOptions,
+import {
+  ConfigError,
+  type ConfigIssue,
+  type FieldSchema,
+  type GeneratedSchema,
+  type LoadConfigOptions,
 } from '../schema.js';
 import { coerceEnvironmentValue, validateTypedCandidate } from './coerce.js';
-import { readDotenvFiles } from './dotenv.js';
+import { type DotenvSource, readDotenvFiles } from './dotenv.js';
 import {
   collectOverrideEntries,
   formatPath,
   getOwnPath,
   hasUnsafePathSegment,
+  nullPrototypeRecord,
+  type OverrideEntry,
   setOwnPath,
 } from './object.js';
 
@@ -21,118 +23,36 @@ interface Candidate {
   readonly environmentValue: boolean;
 }
 
-export function resolveConfig<T>(
-  schema: GeneratedSchema,
-  options: LoadConfigOptions<T> = {},
-): T {
-  const issues: ConfigIssue[] = [];
-  const fields = validateSchema(schema, issues);
-  const dotenv = readDotenvFiles(options.envFiles);
-  for (const failure of dotenv.failures) {
-    issues.push({
-      code: 'source_read_failed',
-      path: failure.path,
-      source: 'dotenv',
-      message: failure.message,
-    });
-  }
-
-  const overrides = options.overrides as unknown;
-  const overrideEntries = collectOverrideEntries(overrides);
-  const fieldPaths = new Set(
-    fields.map((field) => formatPath(field.propertyPath)),
-  );
-  const containerPaths = collectContainerPaths(fields);
-  for (const entry of overrideEntries) {
-    const path = formatPath(entry.path);
-    if (hasUnsafePathSegment(entry.path)) {
-      issues.push(
-        incompatibleSchemaIssue(
-          path,
-          'Override path contains an unsafe segment',
-        ),
-      );
-    } else if (
-      entry.kind === 'cycle' ||
-      (!fieldPaths.has(path) &&
-        !(entry.kind === 'container' && containerPaths.has(path)))
-    ) {
-      issues.push({
-        code: 'unknown_override',
-        path,
-        source: 'overrides',
-        message: `Unknown override path: ${path}`,
-      });
-    }
-  }
-
-  const selections = fields.map((field) => ({
-    field,
-    candidate: findCandidate(field, schema, options, dotenv.sources, overrides),
-  }));
-  const activeParents = new Set<string>();
-  for (const { field, candidate } of selections) {
-    if (candidate !== undefined) {
-      for (const parent of field.optionalParents) {
-        activeParents.add(formatPath(parent));
-      }
-    }
-  }
-  const resolved: { field: FieldSchema; value: unknown }[] = [];
-  for (const { field, candidate } of selections) {
-    if (candidate !== undefined) {
-      const result = candidate.environmentValue
-        ? coerceEnvironmentValue(field.kind, candidate.value)
-        : validateTypedCandidate(field.kind, candidate.value);
-      if ('error' in result) {
-        issues.push(invalidValueIssue(field, candidate, result.error));
-      } else {
-        resolved.push({ field, value: cloneResolvedValue(result.value) });
-      }
-    } else if (field.required && isFieldActive(field, activeParents)) {
-      issues.push({
-        code: 'missing_value',
-        path: formatPath(field.propertyPath),
-        envKey: field.envName,
-        message: `Missing required value for ${formatPath(field.propertyPath)}`,
-      });
-    }
-  }
-
-  if (issues.length > 0) {
-    throw new ConfigError(issues);
-  }
-
-  const output = Object.create(null) as Record<string, unknown>;
-  for (const path of containersToReconstruct(fields, activeParents)) {
-    if (!setOwnPath(output, path, Object.create(null))) {
-      throw new ConfigError([
-        incompatibleSchemaIssue(
-          formatPath(path),
-          'Schema paths cannot be reconstructed safely',
-        ),
-      ]);
-    }
-  }
-  for (const { field, value } of resolved) {
-    if (!setOwnPath(output, field.propertyPath, value)) {
-      throw new ConfigError([
-        incompatibleSchemaIssue(
-          formatPath(field.propertyPath),
-          'Schema paths cannot be reconstructed safely',
-        ),
-      ]);
-    }
-  }
-
-  return output as T;
+interface CandidateSources {
+  readonly schema: GeneratedSchema;
+  readonly source: LoadConfigOptions<unknown>['source'];
+  readonly dotenvSources: readonly DotenvSource[];
+  readonly overrides: unknown;
 }
 
-function validateSchema(
+interface Selection {
+  readonly field: FieldSchema;
+  readonly candidate: Candidate | undefined;
+}
+
+interface ResolvedField {
+  readonly field: FieldSchema;
+  readonly value: unknown;
+}
+
+const incompatibleSchemaIssue = (
+  path: string,
+  message: string,
+): ConfigIssue => ({ code: 'incompatible_schema', path, message });
+
+const validateSchema = (
   schema: GeneratedSchema,
   issues: ConfigIssue[],
-): readonly FieldSchema[] {
-  if (schema.protocolVersion !== 1) {
+): readonly FieldSchema[] => {
+  // Generated files from another release can carry another version at runtime.
+  const protocolVersion: number = schema.protocolVersion;
+
+  if (protocolVersion !== 1) {
     issues.push(
       incompatibleSchemaIssue('$schema', 'Unsupported schema protocol version'),
     );
@@ -141,8 +61,10 @@ function validateSchema(
 
   const seen = new Set<string>();
   const fields: FieldSchema[] = [];
+
   for (const field of schema.fields) {
     const path = formatPath(field.propertyPath);
+
     if (
       field.propertyPath.length === 0 ||
       hasUnsafePathSegment(field.propertyPath)
@@ -152,6 +74,7 @@ function validateSchema(
       );
       continue;
     }
+
     if (seen.has(path)) {
       issues.push(
         incompatibleSchemaIssue(
@@ -161,6 +84,7 @@ function validateSchema(
       );
       continue;
     }
+
     if (field.optionalParents.some(hasUnsafePathSegment)) {
       issues.push(
         incompatibleSchemaIssue(
@@ -176,59 +100,68 @@ function validateSchema(
   }
 
   return fields;
-}
+};
 
-function findCandidate<T>(
+// A blank value counts as unset, so a `.env.example`-style `KEY=` line
+// falls through to the next level instead of failing coercion.
+const isPresent = (value: string | undefined): value is string =>
+  value !== undefined && value !== '';
+
+const overrideCandidate = (
   field: FieldSchema,
-  schema: GeneratedSchema,
-  options: LoadConfigOptions<T>,
-  dotenvSources: readonly {
-    name: string;
-    values: Readonly<Record<string, string>>;
-  }[],
   overrides: unknown,
-): Candidate | undefined {
+): Candidate | undefined => {
   const override = getOwnPath(overrides, field.propertyPath);
-  if (override.found && override.value !== undefined) {
-    return {
-      source: 'overrides',
-      value: override.value,
-      environmentValue: false,
-    };
+
+  return override.found && override.value !== undefined
+    ? { source: 'overrides', value: override.value, environmentValue: false }
+    : undefined;
+};
+
+const environmentCandidate = (
+  field: FieldSchema,
+  source: LoadConfigOptions<unknown>['source'],
+): Candidate | undefined => {
+  const values = source ?? process.env;
+  const value = Object.hasOwn(values, field.envName)
+    ? values[field.envName]
+    : undefined;
+
+  if (!isPresent(value)) {
+    return undefined;
   }
 
-  // A blank value counts as unset, so a `.env.example`-style `KEY=` line
-  // falls through to the next level instead of failing coercion.
-  if (options.source !== undefined) {
-    const value = Object.hasOwn(options.source, field.envName)
-      ? options.source[field.envName]
-      : undefined;
-    if (value !== undefined && value !== '') {
-      return { source: 'source', value, environmentValue: true };
-    }
-  }
+  return {
+    source: source === undefined ? 'process.env' : 'source',
+    value,
+    environmentValue: true,
+  };
+};
 
-  if (options.source === undefined) {
-    const value = Object.hasOwn(process.env, field.envName)
-      ? process.env[field.envName]
-      : undefined;
-    if (value !== undefined && value !== '') {
-      return { source: 'process.env', value, environmentValue: true };
-    }
-  }
-
-  for (let index = dotenvSources.length - 1; index >= 0; index -= 1) {
-    const source = dotenvSources[index]!;
+const dotenvCandidate = (
+  field: FieldSchema,
+  dotenvSources: readonly DotenvSource[],
+): Candidate | undefined => {
+  for (const source of dotenvSources.toReversed()) {
     const value = source.values[field.envName];
-    if (value !== undefined && value !== '') {
+
+    if (isPresent(value)) {
       return { source: source.name, value, environmentValue: true };
     }
   }
 
+  return undefined;
+};
+
+const defaultCandidate = (
+  field: FieldSchema,
+  schema: GeneratedSchema,
+): Candidate | undefined => {
   const compiledDefault = getOwnPath(
     schema.compiledDefaults,
     field.propertyPath,
   );
+
   if (compiledDefault.found && compiledDefault.value !== undefined) {
     return {
       source: 'compiled default',
@@ -246,52 +179,75 @@ function findCandidate<T>(
   }
 
   return undefined;
-}
+};
 
-function cloneResolvedValue(value: unknown): unknown {
-  return Array.isArray(value) ? [...value] : value;
-}
+const findCandidate = (
+  field: FieldSchema,
+  sources: CandidateSources,
+): Candidate | undefined =>
+  overrideCandidate(field, sources.overrides) ??
+  environmentCandidate(field, sources.source) ??
+  dotenvCandidate(field, sources.dotenvSources) ??
+  defaultCandidate(field, sources.schema);
 
-function isFieldActive(
+const cloneResolvedValue = (value: unknown): unknown =>
+  Array.isArray(value) ? Array.from(value) : value;
+
+const isFieldActive = (
   field: FieldSchema,
   activeParents: ReadonlySet<string>,
-): boolean {
-  return field.optionalParents.every((parent) =>
+): boolean =>
+  field.optionalParents.every((parent) =>
     activeParents.has(formatPath(parent)),
   );
-}
 
-function invalidValueIssue(
+const invalidValueIssue = (
   field: FieldSchema,
   candidate: Candidate,
   message: string,
-): ConfigIssue {
-  return {
-    code: 'invalid_value',
-    path: formatPath(field.propertyPath),
-    source: candidate.source,
-    envKey: field.envName,
-    message: field.secret ? 'Invalid value for secret field' : message,
-    ...(field.secret ? {} : { received: candidate.value }),
-  };
-}
+): ConfigIssue => ({
+  code: 'invalid_value',
+  path: formatPath(field.propertyPath),
+  source: candidate.source,
+  envKey: field.envName,
+  message: field.secret ? 'Invalid value for secret field' : message,
+  ...(field.secret ? {} : { received: candidate.value }),
+});
 
-function collectContainerPaths(
+const collectContainerPaths = (
   fields: readonly FieldSchema[],
-): ReadonlySet<string> {
+): ReadonlySet<string> => {
   const paths = new Set<string>();
+
   for (const field of fields) {
     for (let length = 1; length < field.propertyPath.length; length += 1) {
       paths.add(formatPath(field.propertyPath.slice(0, length)));
     }
   }
-  return paths;
-}
 
-function containersToReconstruct(
+  return paths;
+};
+
+const optionalAncestorsAreActive = (
+  path: readonly string[],
+  optionalPaths: ReadonlySet<string>,
+  activeParents: ReadonlySet<string>,
+): boolean => {
+  for (let length = 1; length <= path.length; length += 1) {
+    const ancestor = formatPath(path.slice(0, length));
+
+    if (optionalPaths.has(ancestor) && !activeParents.has(ancestor)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const containersToReconstruct = (
   fields: readonly FieldSchema[],
   activeParents: ReadonlySet<string>,
-): readonly (readonly string[])[] {
+): readonly (readonly string[])[] => {
   const optionalPaths = new Set(
     fields.flatMap((field) =>
       field.optionalParents.map((path) => formatPath(path)),
@@ -302,36 +258,174 @@ function containersToReconstruct(
   for (const field of fields) {
     for (let length = 1; length < field.propertyPath.length; length += 1) {
       const path = field.propertyPath.slice(0, length);
-      const formatted = formatPath(path);
-      if (
-        (optionalPaths.has(formatted) && !activeParents.has(formatted)) ||
-        !optionalAncestorsAreActive(path, optionalPaths, activeParents)
-      ) {
+
+      // The ancestor check includes `path` itself, so an inactive optional
+      // container is skipped here too.
+      if (!optionalAncestorsAreActive(path, optionalPaths, activeParents)) {
         continue;
       }
-      containers.set(formatted, path);
+
+      containers.set(formatPath(path), path);
     }
   }
 
-  return [...containers.values()].sort(
+  return [...containers.values()].toSorted(
     (left, right) => left.length - right.length,
   );
-}
+};
 
-function optionalAncestorsAreActive(
-  path: readonly string[],
-  optionalPaths: ReadonlySet<string>,
-  activeParents: ReadonlySet<string>,
-): boolean {
-  for (let length = 1; length <= path.length; length += 1) {
-    const ancestor = formatPath(path.slice(0, length));
-    if (optionalPaths.has(ancestor) && !activeParents.has(ancestor)) {
-      return false;
+const overrideIssues = (
+  fields: readonly FieldSchema[],
+  entries: readonly OverrideEntry[],
+): ConfigIssue[] => {
+  const fieldPaths = new Set(
+    fields.map((field) => formatPath(field.propertyPath)),
+  );
+  const containerPaths = collectContainerPaths(fields);
+  const issues: ConfigIssue[] = [];
+
+  for (const entry of entries) {
+    const path = formatPath(entry.path);
+    const isKnownContainer =
+      entry.kind === 'container' && containerPaths.has(path);
+    const isKnownPath = fieldPaths.has(path) || isKnownContainer;
+
+    if (hasUnsafePathSegment(entry.path)) {
+      issues.push(
+        incompatibleSchemaIssue(
+          path,
+          'Override path contains an unsafe segment',
+        ),
+      );
+    } else if (entry.kind === 'cycle' || !isKnownPath) {
+      issues.push({
+        code: 'unknown_override',
+        path,
+        source: 'overrides',
+        message: `Unknown override path: ${path}`,
+      });
     }
   }
-  return true;
-}
 
-function incompatibleSchemaIssue(path: string, message: string): ConfigIssue {
-  return { code: 'incompatible_schema', path, message };
-}
+  return issues;
+};
+
+const collectActiveParents = (
+  selections: readonly Selection[],
+): ReadonlySet<string> => {
+  const activeParents = new Set<string>();
+
+  for (const { field, candidate } of selections) {
+    if (candidate !== undefined) {
+      for (const parent of field.optionalParents) {
+        activeParents.add(formatPath(parent));
+      }
+    }
+  }
+
+  return activeParents;
+};
+
+const resolveSelections = (
+  selections: readonly Selection[],
+  activeParents: ReadonlySet<string>,
+  issues: ConfigIssue[],
+): readonly ResolvedField[] => {
+  const resolved: ResolvedField[] = [];
+
+  for (const { field, candidate } of selections) {
+    if (candidate !== undefined) {
+      const result = candidate.environmentValue
+        ? coerceEnvironmentValue(field.kind, candidate.value)
+        : validateTypedCandidate(field.kind, candidate.value);
+
+      if ('error' in result) {
+        issues.push(invalidValueIssue(field, candidate, result.error));
+      } else {
+        resolved.push({ field, value: cloneResolvedValue(result.value) });
+      }
+    } else if (field.required && isFieldActive(field, activeParents)) {
+      issues.push({
+        code: 'missing_value',
+        path: formatPath(field.propertyPath),
+        envKey: field.envName,
+        message: `Missing required value for ${formatPath(field.propertyPath)}`,
+      });
+    }
+  }
+
+  return resolved;
+};
+
+const reconstructionError = (path: readonly string[]): ConfigError =>
+  new ConfigError([
+    incompatibleSchemaIssue(
+      formatPath(path),
+      'Schema paths cannot be reconstructed safely',
+    ),
+  ]);
+
+const buildOutput = (
+  fields: readonly FieldSchema[],
+  activeParents: ReadonlySet<string>,
+  resolved: readonly ResolvedField[],
+): Record<string, unknown> => {
+  const output = nullPrototypeRecord<unknown>();
+
+  for (const path of containersToReconstruct(fields, activeParents)) {
+    if (!setOwnPath(output, path, nullPrototypeRecord())) {
+      throw reconstructionError(path);
+    }
+  }
+
+  for (const { field, value } of resolved) {
+    if (!setOwnPath(output, field.propertyPath, value)) {
+      throw reconstructionError(field.propertyPath);
+    }
+  }
+
+  return output;
+};
+
+export const resolveConfig = <T>(
+  schema: GeneratedSchema,
+  options: LoadConfigOptions<T> = {},
+): T => {
+  const issues: ConfigIssue[] = [];
+  const fields = validateSchema(schema, issues);
+  const dotenv = readDotenvFiles(options.envFiles);
+
+  for (const failure of dotenv.failures) {
+    issues.push({
+      code: 'source_read_failed',
+      path: failure.path,
+      source: 'dotenv',
+      message: failure.message,
+    });
+  }
+
+  const overrides = options.overrides as unknown;
+  issues.push(...overrideIssues(fields, collectOverrideEntries(overrides)));
+
+  const sources: CandidateSources = {
+    schema,
+    source: options.source,
+    dotenvSources: dotenv.sources,
+    overrides,
+  };
+  const selections = fields.map((field) => ({
+    field,
+    candidate: findCandidate(field, sources),
+  }));
+  const activeParents = collectActiveParents(selections);
+  const resolved = resolveSelections(selections, activeParents, issues);
+
+  if (issues.length > 0) {
+    throw new ConfigError(issues);
+  }
+
+  const output = buildOutput(fields, activeParents, resolved);
+
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- public generic return; every field of T was validated above
+  return output as T;
+};

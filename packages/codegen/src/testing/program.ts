@@ -2,10 +2,10 @@ import path from 'node:path';
 import ts from 'typescript';
 
 /** Creates a real checker program with virtual schema files and real package imports. */
-export function createTestProgram(
+export const createTestProgram = (
   files: Readonly<Record<string, string>>,
   compilerOptions: ts.CompilerOptions = {},
-): ts.Program {
+): ts.Program => {
   const options: ts.CompilerOptions = {
     strict: true,
     target: ts.ScriptTarget.ES2022,
@@ -25,11 +25,13 @@ export function createTestProgram(
   host.readFile = (name) => contents.get(path.resolve(name)) ?? readFile(name);
   host.fileExists = (name) =>
     contents.has(path.resolve(name)) || fileExists(name);
+
   host.getSourceFile = (name, languageVersion) => {
     const text = host.readFile(name);
     return text === undefined
       ? undefined
       : ts.createSourceFile(name, text, languageVersion, true);
   };
+
   return ts.createProgram([...contents.keys()], options, host);
-}
+};

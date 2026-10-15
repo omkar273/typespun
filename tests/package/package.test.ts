@@ -13,14 +13,20 @@ beforeAll(async () => {
   artifacts = await packArtifacts();
 });
 
-afterAll(async () => {
-  await removePackedArtifacts(artifacts);
-});
+afterAll(async () => await removePackedArtifacts(artifacts));
+
+const packed = (): PackedArtifacts => {
+  if (artifacts === undefined) {
+    throw new Error('The package artifacts were not packed');
+  }
+
+  return artifacts;
+};
 
 describe('published package contents', () => {
   test.each([
-    ['runtime', () => artifacts!.runtime],
-    ['code generator', () => artifacts!.codegen],
+    ['runtime', () => packed().runtime],
+    ['code generator', () => packed().codegen],
   ])(
     '%s artifact contains built output without development inputs',
     (_name: string, path: () => string): void => {
@@ -46,25 +52,25 @@ describe('published package contents', () => {
   );
 
   test('packed manifests are public and use publishable dependencies', () => {
-    const runtime = archivedPackageJson(artifacts!.runtime);
-    const codegen = archivedPackageJson(artifacts!.codegen);
-    const codegenDependencies = codegen.dependencies as Record<string, string>;
-    const runtimeDependencies = runtime.dependencies as Record<string, string>;
-    const runtimeEngines = runtime.engines as Record<string, string>;
-    const codegenEngines = codegen.engines as Record<string, string>;
+    const runtime = archivedPackageJson(packed().runtime);
+    const codegen = archivedPackageJson(packed().codegen);
+    const engines = { node: '>=22', bun: '>=1.4.1' };
 
-    expect(runtime.private).toBeUndefined();
-    expect(codegen.private).toBeUndefined();
-    expect(codegenDependencies.typespun).toBe(runtime.version);
-    expect(codegenDependencies.typespun.startsWith('workspace:')).toBe(false);
-    expect(Object.keys(runtimeDependencies)).toEqual(['dotenv']);
-    expect(runtimeDependencies).not.toHaveProperty('typescript');
-    expect(runtimeDependencies).not.toHaveProperty('yaml');
-    expect(runtimeDependencies).not.toHaveProperty('typespun-codegen');
-    expect(runtimeEngines).toEqual({
-      node: '>=22',
-      bun: '>=1.4.1',
-    });
-    expect(codegenEngines).toEqual(runtimeEngines);
+    expect(runtime).not.toHaveProperty('private');
+    expect(codegen).not.toHaveProperty('private');
+    expect(codegen).toHaveProperty(
+      ['dependencies', 'typespun'],
+      runtime['version'],
+    );
+    expect(codegen).toHaveProperty(
+      ['dependencies', 'typespun'],
+      expect.not.stringMatching(/^workspace:/),
+    );
+    expect(Object.keys(runtime['dependencies'] ?? {})).toEqual(['dotenv']);
+    expect(runtime).not.toHaveProperty(['dependencies', 'typescript']);
+    expect(runtime).not.toHaveProperty(['dependencies', 'yaml']);
+    expect(runtime).not.toHaveProperty(['dependencies', 'typespun-codegen']);
+    expect(runtime).toHaveProperty('engines', engines);
+    expect(codegen).toHaveProperty('engines', engines);
   });
 });

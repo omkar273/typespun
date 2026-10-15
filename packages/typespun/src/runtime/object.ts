@@ -6,18 +6,26 @@ export interface OverrideEntry {
   readonly kind: 'value' | 'container' | 'cycle';
 }
 
-export function hasUnsafePathSegment(path: readonly string[]): boolean {
-  return path.some((segment) => unsafeSegments.has(segment));
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
 
-export function formatPath(path: readonly string[]): string {
-  return path.join('.');
-}
+export const nullPrototypeRecord = <T>(
+  values: Readonly<Record<string, T>> = {},
+): Record<string, T> => {
+  const record = { ...values };
+  Reflect.setPrototypeOf(record, null);
+  return record;
+};
 
-export function getOwnPath(
+export const hasUnsafePathSegment = (path: readonly string[]): boolean =>
+  path.some((segment) => unsafeSegments.has(segment));
+
+export const formatPath = (path: readonly string[]): string => path.join('.');
+
+export const getOwnPath = (
   value: unknown,
   path: readonly string[],
-): { found: boolean; value?: unknown } {
+): { found: boolean; value?: unknown } => {
   let current = value;
 
   for (const segment of path) {
@@ -29,22 +37,26 @@ export function getOwnPath(
   }
 
   return { found: true, value: current };
-}
+};
 
-export function setOwnPath(
+export const setOwnPath = (
   target: Record<string, unknown>,
   path: readonly string[],
   value: unknown,
-): boolean {
-  if (path.length === 0 || hasUnsafePathSegment(path)) {
+): boolean => {
+  const leaf = path.at(-1);
+
+  if (leaf === undefined || hasUnsafePathSegment(path)) {
     return false;
   }
 
   let current = target;
+
   for (const segment of path.slice(0, -1)) {
     const existing = current[segment];
+
     if (existing === undefined) {
-      const child = Object.create(null) as Record<string, unknown>;
+      const child = nullPrototypeRecord<unknown>();
       current[segment] = child;
       current = child;
     } else if (isRecord(existing)) {
@@ -54,49 +66,46 @@ export function setOwnPath(
     }
   }
 
-  current[path[path.length - 1]!] = value;
+  current[leaf] = value;
   return true;
-}
+};
 
-export function collectOverrideEntries(
-  value: unknown,
-): readonly OverrideEntry[] {
+export const collectOverrideEntries = (
+  value?: unknown,
+): readonly OverrideEntry[] => {
   const entries: OverrideEntry[] = [];
-  visit(value, [], entries, new Set<object>());
-  return entries;
-}
+  const ancestors = new Set<object>();
 
-function visit(
-  value: unknown,
-  path: readonly string[],
-  entries: OverrideEntry[],
-  ancestors: Set<object>,
-): void {
-  if (!isRecord(value) || Array.isArray(value)) {
-    if (path.length > 0 && value !== undefined) {
-      entries.push({ path, value, kind: 'value' });
+  const visit = (current: unknown, path: readonly string[]): void => {
+    if (!isRecord(current) || Array.isArray(current)) {
+      if (path.length > 0 && current !== undefined) {
+        entries.push({ path, value: current, kind: 'value' });
+      }
+
+      return;
     }
-    return;
-  }
 
-  if (ancestors.has(value)) {
-    entries.push({ path, value: undefined, kind: 'cycle' });
-    return;
-  }
+    if (ancestors.has(current)) {
+      entries.push({ path, value: undefined, kind: 'cycle' });
+      return;
+    }
 
-  const keys = Object.keys(value);
-  if (keys.length === 0 && path.length > 0) {
-    entries.push({ path, value, kind: 'container' });
-    return;
-  }
+    const keys = Object.keys(current);
 
-  ancestors.add(value);
-  for (const key of keys) {
-    visit(value[key], [...path, key], entries, ancestors);
-  }
-  ancestors.delete(value);
-}
+    if (keys.length === 0 && path.length > 0) {
+      entries.push({ path, value: current, kind: 'container' });
+      return;
+    }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
+    ancestors.add(current);
+
+    for (const key of keys) {
+      visit(current[key], [...path, key]);
+    }
+
+    ancestors.delete(current);
+  };
+
+  visit(value, []);
+  return entries;
+};

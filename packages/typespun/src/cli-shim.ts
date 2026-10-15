@@ -11,50 +11,44 @@ import { fileURLToPath } from 'node:url';
 const CODEGEN_PACKAGE = 'typespun-codegen';
 const CLI_NAMES = [CODEGEN_PACKAGE, 'typespun'] as const;
 
-export async function run(args: readonly string[]): Promise<number> {
-  const localBinary = resolveCodegenBinary(process.cwd());
-  if (localBinary !== undefined) {
-    return runCommand(process.execPath, [localBinary, ...args]);
-  }
-  return runFallback(args);
-}
-
-export function resolveCodegenBinary(
-  start: string,
-  /** Directory of this module; overridable so the sibling lookup is testable. */
-  moduleDirectory = resolve(fileURLToPath(new URL('.', import.meta.url))),
-): string | undefined {
-  const siblingCandidate = join(
-    moduleDirectory,
-    '..',
+const findCodegenBinary = (
+  directory: string,
+  siblingCandidate: string,
+): string | undefined => {
+  const candidate = join(
+    directory,
+    'node_modules',
     CODEGEN_PACKAGE,
     'dist',
     'bin.js',
   );
-  let directory = resolve(start);
-  while (true) {
-    const candidate = join(
-      directory,
-      'node_modules',
-      CODEGEN_PACKAGE,
-      'dist',
-      'bin.js',
-    );
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    if (existsSync(siblingCandidate)) {
-      return siblingCandidate;
-    }
-    const parent = dirname(directory);
-    if (parent === directory) break;
-    directory = parent;
+
+  if (existsSync(candidate)) {
+    return candidate;
   }
 
-  return undefined;
-}
+  if (existsSync(siblingCandidate)) {
+    return siblingCandidate;
+  }
 
-async function runFallback(args: readonly string[]): Promise<number> {
+  const parent = dirname(directory);
+
+  return parent === directory
+    ? undefined
+    : findCodegenBinary(parent, siblingCandidate);
+};
+
+export const resolveCodegenBinary = (
+  start: string,
+  /** Directory of this module; overridable so the sibling lookup is testable. */
+  moduleDirectory = resolve(fileURLToPath(new URL('.', import.meta.url))),
+): string | undefined =>
+  findCodegenBinary(
+    resolve(start),
+    join(moduleDirectory, '..', CODEGEN_PACKAGE, 'dist', 'bin.js'),
+  );
+
+const runFallback = async (args: readonly string[]): Promise<number> => {
   for (const cliName of CLI_NAMES) {
     const bunxAttempt = await runIfAvailable('bunx', [
       '--package',
@@ -62,6 +56,7 @@ async function runFallback(args: readonly string[]): Promise<number> {
       cliName,
       ...args,
     ]);
+
     if (bunxAttempt !== null) {
       return bunxAttempt;
     }
@@ -74,6 +69,7 @@ async function runFallback(args: readonly string[]): Promise<number> {
       cliName,
       ...args,
     ]);
+
     if (npxAttempt !== null) {
       return npxAttempt;
     }
@@ -83,10 +79,13 @@ async function runFallback(args: readonly string[]): Promise<number> {
     'Unable to run the typespun CLI. Install bunx (Bun), npm/npx, or typespun-codegen in this project.\n',
   );
   return 127;
-}
+};
 
-function runCommand(command: string, args: readonly string[]): Promise<number> {
-  return new Promise((resolveExit) => {
+const runCommand = (
+  command: string,
+  args: readonly string[],
+): Promise<number> =>
+  new Promise((resolveExit) => {
     const child = spawn(command, [...args], {
       stdio: 'inherit',
       cwd: process.cwd(),
@@ -94,20 +93,15 @@ function runCommand(command: string, args: readonly string[]): Promise<number> {
     });
     /* v8 ignore next 3 -- the command is always process.execPath, so spawn
        itself cannot fail here. */
-    child.on('error', () => {
-      resolveExit(1);
-    });
-    child.on('close', (code) => {
-      resolveExit(code ?? 1);
-    });
+    child.on('error', () => resolveExit(1));
+    child.on('close', (code) => resolveExit(code ?? 1));
   });
-}
 
-function runIfAvailable(
+const runIfAvailable = (
   command: string,
   args: readonly string[],
-): Promise<number | null> {
-  return new Promise((resolveExit) => {
+): Promise<number | null> =>
+  new Promise((resolveExit) => {
     const child = spawn(command, [...args], {
       stdio: 'inherit',
       cwd: process.cwd(),
@@ -117,8 +111,15 @@ function runIfAvailable(
       if (error.code === 'ENOENT') resolveExit(null);
       else resolveExit(1);
     });
-    child.on('close', (code) => {
-      resolveExit(code ?? 1);
-    });
+    child.on('close', (code) => resolveExit(code ?? 1));
   });
-}
+
+export const run = async (args: readonly string[]): Promise<number> => {
+  const localBinary = resolveCodegenBinary(process.cwd());
+
+  if (localBinary !== undefined) {
+    return runCommand(process.execPath, [localBinary, ...args]);
+  }
+
+  return runFallback(args);
+};

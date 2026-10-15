@@ -1,27 +1,28 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { Config, Default, Env, Ignore, Key, Secret } from './annotations.js';
+
+const expectInert = (
+  decorator: ReturnType<typeof Config>,
+  target: unknown,
+  context: object,
+) => {
+  const decorate = vi.fn(decorator);
+  decorate(target, context);
+  expect(decorate.mock.results).toEqual([{ type: 'return', value: undefined }]);
+};
 
 describe('inert annotations', () => {
   test('do not replace or mutate decorated values', () => {
-    class Example {}
-    const context = { kind: 'class', name: 'Example' } as const;
+    class Example {
+      readonly marker = true;
+    }
 
-    expect(Config()(Example, context)).toBeUndefined();
-    expect(
-      Default('value')(undefined, { kind: 'field', name: 'value' }),
-    ).toBeUndefined();
-    expect(
-      Env('PORT')(undefined, { kind: 'field', name: 'port' }),
-    ).toBeUndefined();
-    expect(
-      Ignore()(undefined, { kind: 'field', name: 'ignored' }),
-    ).toBeUndefined();
-    expect(
-      Key('renamed')(undefined, { kind: 'field', name: 'key' }),
-    ).toBeUndefined();
-    expect(
-      Secret()(undefined, { kind: 'field', name: 'token' }),
-    ).toBeUndefined();
-    expect(Example).toEqual(Example);
+    expectInert(Config(), Example, { kind: 'class', name: 'Example' });
+    expectInert(Default('value'), undefined, { kind: 'field', name: 'value' });
+    expectInert(Env('PORT'), undefined, { kind: 'field', name: 'port' });
+    expectInert(Ignore(), undefined, { kind: 'field', name: 'ignored' });
+    expectInert(Key('renamed'), undefined, { kind: 'field', name: 'key' });
+    expectInert(Secret(), undefined, { kind: 'field', name: 'token' });
+    expect(new Example()).toEqual({ marker: true });
   });
 });

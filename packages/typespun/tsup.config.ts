@@ -7,6 +7,7 @@ export default defineConfig({
   dts: {
     compilerOptions: {
       composite: false,
+      types: ['bun'],
       ignoreDeprecations: '6.0',
     },
   },

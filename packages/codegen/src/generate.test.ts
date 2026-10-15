@@ -27,7 +27,7 @@ afterEach(() => {
   }
 });
 
-function createProject(schema = validSchema): string {
+const createProject = (schema = validSchema): string => {
   const directory = mkdtempSync(join(tmpdir(), 'typespun-generate-'));
   temporaryDirectories.push(directory);
   write(directory, 'package.json', '{"type":"module"}');
@@ -45,17 +45,17 @@ function createProject(schema = validSchema): string {
   );
   write(directory, 'src/config.ts', schema);
   return directory;
-}
+};
 
-function write(
+const write = (
   directory: string,
   relativePath: string,
   contents: string,
-): void {
+): void => {
   const path = join(directory, relativePath);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, contents);
-}
+};
 
 const validSchema = `/** @typespun */
 export interface AppConfig {
@@ -284,11 +284,10 @@ export interface AppConfig {
 });
 
 /** Sibling temp files the atomic write must never leave behind. */
-function temporaryArtifacts(directory: string): string[] {
-  return readdirSync(directory).filter(
+const temporaryArtifacts = (directory: string): string[] =>
+  readdirSync(directory).filter(
     (entry) => entry.startsWith('.typespun.') && entry.endsWith('.tmp'),
   );
-}
 
 describe('generation failure paths', () => {
   test.each([

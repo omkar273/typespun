@@ -45,6 +45,14 @@ afterAll(async () => {
   ]);
 });
 
+const consumer = (): string => {
+  if (consumerDirectory === undefined) {
+    throw new Error('The consumer directory was not created');
+  }
+
+  return consumerDirectory;
+};
+
 describe('packed consumer', () => {
   test('ES modules load the runtime, generated ABI, and the codegen pipeline', async () => {
     await writeFixture(
@@ -139,7 +147,7 @@ void load;
   });
 
   test('installed CLI binary runs under Bun and Node', () => {
-    const bin = join(consumerDirectory!, 'node_modules/.bin/typespun');
+    const bin = join(consumer(), 'node_modules/.bin/typespun');
 
     expect(run(['bun', bin, '--help'], consumerDirectory)).toContain(
       'Usage: typespun',
@@ -150,7 +158,7 @@ void load;
   });
 
   test('installed CLI initializes, generates, checks, compiles, and runs an interface project', async () => {
-    const project = join(consumerDirectory!, 'projects/interface');
+    const project = join(consumer(), 'projects/interface');
     await createProject(project);
     const bin = installedBinary('typespun');
 
@@ -172,7 +180,7 @@ console.log(loadConfig({ source: { PORT: '4321' } }).port);
   });
 
   test('installed CLI completes a partial class project before generate, check, compile, and execution', async () => {
-    const project = join(consumerDirectory!, 'projects/class');
+    const project = join(consumer(), 'projects/class');
     await createProject(project, { keep: 'unchanged' });
     await writeProjectFile(
       project,
@@ -196,9 +204,9 @@ console.log(loadConfig({ source: { PORT: '4321' } }).port);
         project,
       ),
     ).toContain('Created src/config.ts.');
-    expect(await readFile(join(project, 'src/config.ts'), 'utf8')).toContain(
-      '@Config()\nexport class AppConfig',
-    );
+    const configSource = await readFile(join(project, 'src/config.ts'), 'utf8');
+
+    expect(configSource).toContain('@Config()\nexport class AppConfig');
     expect(run([bin, 'generate'], project)).toContain(
       'Unchanged src/generated/typespun.ts.',
     );
@@ -216,19 +224,18 @@ console.log(loadConfig({ source: { APP_PORT: '3000' } }).port);
   });
 });
 
-async function writeFixture(name: string, contents: string): Promise<void> {
-  await mkdir(consumerDirectory!, { recursive: true });
-  await writeFile(join(consumerDirectory!, name), contents);
-}
+const writeFixture = async (name: string, contents: string): Promise<void> => {
+  await mkdir(consumer(), { recursive: true });
+  await writeFile(join(consumer(), name), contents);
+};
 
-function installedBinary(name: 'tsc' | 'typespun'): string {
-  return join(consumerDirectory!, 'node_modules/.bin', name);
-}
+const installedBinary = (name: 'tsc' | 'typespun'): string =>
+  join(consumer(), 'node_modules/.bin', name);
 
-async function createProject(
+const createProject = async (
   project: string,
   scripts: Readonly<Record<string, string>> = {},
-): Promise<void> {
+): Promise<void> => {
   await writeProjectFile(
     project,
     'package.json',
@@ -253,14 +260,14 @@ async function createProject(
       2,
     )}\n`,
   );
-}
+};
 
-async function writeProjectFile(
+const writeProjectFile = async (
   project: string,
   relativePath: string,
   contents: string,
-): Promise<void> {
+): Promise<void> => {
   const path = join(project, relativePath);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
-}
+};

@@ -3,15 +3,14 @@ import { describe, expect, test } from 'vitest';
 import { sha256Hex } from './sha256.js';
 
 /** The oracle: Node's own SHA-256, which the browser-safe port must match. */
-function nodeSha256Hex(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
+const nodeSha256Hex = (text: string): string =>
+  createHash('sha256').update(text, 'utf8').digest('hex');
 
 /**
  * Deterministic 32-bit PRNG (mulberry32). A fixed seed keeps the generated
  * corpus byte-identical on every run, so a failure is always reproducible.
  */
-function seededRandom(seed: number): () => number {
+const seededRandom = (seed: number): (() => number) => {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;
@@ -20,7 +19,7 @@ function seededRandom(seed: number): () => number {
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
     return ((value ^ (value >>> 14)) >>> 0) / 0x1_0000_0000;
   };
-}
+};
 
 /** Code points spanning 1-, 2-, 3- and 4-byte UTF-8 encodings. */
 const CODE_POINTS = [
@@ -28,15 +27,17 @@ const CODE_POINTS = [
   0xfffd, 0x1f600, 0x10348,
 ];
 
-function generateInput(seed: number, length: number): string {
+const generateInput = (seed: number, length: number): string => {
   const random = seededRandom(seed);
   let text = '';
+
   for (let index = 0; index < length; index++) {
     const pick = Math.floor(random() * CODE_POINTS.length);
-    text += String.fromCodePoint(CODE_POINTS[pick] as number);
+    text += String.fromCodePoint(...CODE_POINTS.slice(pick, pick + 1));
   }
+
   return text;
-}
+};
 
 /**
  * Byte lengths straddling the 64-byte block and the 55/56-byte padding
@@ -68,9 +69,9 @@ describe('sha256Hex', () => {
       'The quick brown fox jumps over the lazy dog.',
       'ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c',
     ],
-  ])('reproduces the published digest for %j', (input, expected) => {
-    expect(sha256Hex(input)).toBe(expected);
-  });
+  ])('reproduces the published digest for %j', (input, expected) =>
+    expect(sha256Hex(input)).toBe(expected),
+  );
 
   test('reproduces the published digest for one million repeated "a"', () => {
     expect(sha256Hex('a'.repeat(1_000_000))).toBe(
@@ -90,9 +91,8 @@ describe('sha256Hex', () => {
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  test('produces different digests for inputs differing in one bit', () => {
-    expect(sha256Hex('typespun')).not.toBe(sha256Hex('typespuo'));
-  });
+  test('produces different digests for inputs differing in one bit', () =>
+    expect(sha256Hex('typespun')).not.toBe(sha256Hex('typespuo')));
 
   test('is deterministic across repeated calls', () => {
     const input = generateInput(7, 200);
@@ -144,9 +144,9 @@ describe('sha256Hex', () => {
       'a realistic config fingerprint payload',
       '{"envPrefix":"APP_","fields":[{"envName":"PORT","type":"number"}]}',
     ],
-  ])('matches node:crypto for %s', (_label, input) => {
-    expect(sha256Hex(input)).toBe(nodeSha256Hex(input));
-  });
+  ])('matches node:crypto for %s', (_label, input) =>
+    expect(sha256Hex(input)).toBe(nodeSha256Hex(input)),
+  );
 
   test.each([1, 2, 3, 4, 5])(
     'matches node:crypto across a deterministic generated corpus (seed %i)',
