@@ -56,7 +56,7 @@
     "access": "public"
   },
   "dependencies": {
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "typespun": "workspace:*",
     "yaml": "2.9.1"
   }
