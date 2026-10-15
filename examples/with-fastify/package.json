@@ -15,7 +15,7 @@
     "typespun": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "26.6.2",
+    "@types/node": "26.6.5",
     "typescript": "6.0.3",
     "typespun-codegen": "workspace:*"
   }
