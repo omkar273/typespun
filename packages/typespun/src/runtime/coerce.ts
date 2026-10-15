@@ -13,10 +13,7 @@ export function coerceEnvironmentValue(
     case 'string':
       return { value };
     case 'number':
-      if (
-        value === '' ||
-        !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)
-      ) {
+      if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
         return { error: 'Expected a finite number' };
       }
 
@@ -31,10 +28,6 @@ export function coerceEnvironmentValue(
     case 'enum':
       return typedResult(kind, value);
     case 'array':
-      if (value === '') {
-        return { error: jsonArrayError(kind.element) };
-      }
-
       try {
         return typedResult(kind, JSON.parse(value));
       } catch {

@@ -197,11 +197,13 @@ function findCandidate<T>(
     };
   }
 
+  // A blank value counts as unset, so a `.env.example`-style `KEY=` line
+  // falls through to the next level instead of failing coercion.
   if (options.source !== undefined) {
     const value = Object.hasOwn(options.source, field.envName)
       ? options.source[field.envName]
       : undefined;
-    if (value !== undefined) {
+    if (value !== undefined && value !== '') {
       return { source: 'source', value, environmentValue: true };
     }
   }
@@ -210,7 +212,7 @@ function findCandidate<T>(
     const value = Object.hasOwn(process.env, field.envName)
       ? process.env[field.envName]
       : undefined;
-    if (value !== undefined) {
+    if (value !== undefined && value !== '') {
       return { source: 'process.env', value, environmentValue: true };
     }
   }
@@ -218,7 +220,7 @@ function findCandidate<T>(
   for (let index = dotenvSources.length - 1; index >= 0; index -= 1) {
     const source = dotenvSources[index]!;
     const value = source.values[field.envName];
-    if (value !== undefined) {
+    if (value !== undefined && value !== '') {
       return { source: source.name, value, environmentValue: true };
     }
   }

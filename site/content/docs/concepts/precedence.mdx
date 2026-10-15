@@ -33,8 +33,11 @@ Here the override wins for `server.port`; `process.env` wins for other keys it
 defines; `.env.local` wins over `.env`; then compiled and inline defaults fill
 remaining leaves.
 
-`undefined` means "no candidate." An empty string is a candidate and is
-validated for its field type. `source: {}` disables ambient environment input.
+`undefined` means "no candidate." A blank environment value also means "no
+candidate": an empty string in `source`, `process.env` or a dotenv file
+(`KEY=`) falls through to the next level, so a required field with only blank
+values reports `missing_value`. Overrides and defaults are typed, so this does
+not apply to them. `source: {}` disables ambient environment input.
 Empty override objects are merge no-ops; unknown or cyclic override paths are
 reported as issues.
 

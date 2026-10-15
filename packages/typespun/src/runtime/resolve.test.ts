@@ -188,6 +188,33 @@ describe('createLoader', () => {
     ]);
   });
 
+  test('gives a JSON example that matches the array element type', () => {
+    const arraySchema: GeneratedSchema = {
+      protocolVersion: 1,
+      fields: (['number', 'boolean'] as const).map((element) => ({
+        propertyPath: [element],
+        defaultsPath: [element],
+        envName: element.toUpperCase(),
+        kind: { type: 'array', element },
+        required: true,
+        secret: false,
+        hasDefault: false,
+        optionalParents: [],
+      })),
+    };
+
+    const error = getConfigError(() =>
+      createLoader(arraySchema)({
+        source: { NUMBER: '1,2', BOOLEAN: 'true,false' },
+      }),
+    );
+
+    expect(error.issues.map((issue) => issue.message)).toEqual([
+      'Expected a JSON array of number, for example [1,2]',
+      'Expected a JSON array of boolean, for example [true,false]',
+    ]);
+  });
+
   test('keeps the array hint out of diagnostics for a secret field', () => {
     const secretSchema: GeneratedSchema = {
       protocolVersion: 1,
@@ -229,7 +256,7 @@ describe('createLoader', () => {
     ]);
   });
 
-  test('rejects empty enum values even when the generated enum includes an empty member', () => {
+  test('never selects an empty enum value even when the generated enum includes an empty member', () => {
     const emptyEnumSchema = {
       protocolVersion: 1,
       fields: [
@@ -249,7 +276,7 @@ describe('createLoader', () => {
     const error = getConfigError(() => loadEmptyEnum({ source: { MODE: '' } }));
 
     expect(error.issues).toEqual([
-      expect.objectContaining({ code: 'invalid_value', path: 'mode' }),
+      expect.objectContaining({ code: 'missing_value', path: 'mode' }),
     ]);
   });
 
@@ -329,6 +356,78 @@ describe('createLoader', () => {
     } finally {
       restoreEnvironment('TYPESPUN_ONLY_PORT', previous);
     }
+  });
+
+  test('treats a blank source value as unset and falls through to dotenv', async () => {
+    using temp = await makeTempDirectory();
+    const dotenvPath = join(temp.path, 'runtime.env');
+    await writeFile(dotenvPath, validDotenv({ ENABLED: 'false' }));
+
+    expect(
+      load({
+        envFiles: [dotenvPath],
+        source: validSource({ ENABLED: '' }),
+      }).enabled,
+    ).toBe(false);
+  });
+
+  test('treats a blank ambient process.env value as unset', async () => {
+    using temp = await makeTempDirectory();
+    const dotenvPath = join(temp.path, 'runtime.env');
+    await writeFile(dotenvPath, validDotenv());
+    process.env.ENABLED = '';
+
+    expect(load({ envFiles: [dotenvPath] }).enabled).toBe(true);
+  });
+
+  test('treats a blank dotenv value as unset and falls through to the earlier file', async () => {
+    using temp = await makeTempDirectory();
+    const firstPath = join(temp.path, 'first.env');
+    const secondPath = join(temp.path, 'second.env');
+    await writeFile(firstPath, validDotenv({ ENABLED: 'false' }));
+    await writeFile(secondPath, 'ENABLED=\n');
+
+    expect(load({ envFiles: [firstPath, secondPath] }).enabled).toBe(false);
+  });
+
+  test('lets a compiled or inline default win over a blank value', async () => {
+    using temp = await makeTempDirectory();
+    const dotenvPath = join(temp.path, 'runtime.env');
+    await writeFile(dotenvPath, 'ORIGINS=\n');
+
+    expect(
+      createLoader<{ origins: string[] }>(
+        defaultsSchema(['inline'], ['compiled']),
+      )({ envFiles: [dotenvPath], source: { ORIGINS: '' } }),
+    ).toEqual({ origins: ['compiled'] });
+    expect(
+      createLoader<{ origins: string[] }>(defaultsSchema(['inline']))({
+        envFiles: [dotenvPath],
+        source: { ORIGINS: '' },
+      }),
+    ).toEqual({ origins: ['inline'] });
+  });
+
+  test('reports a required field with only blank values as missing', async () => {
+    using temp = await makeTempDirectory();
+    const dotenvPath = join(temp.path, 'runtime.env');
+    await writeFile(dotenvPath, 'TYPESPUN_BLANK_PORT=\n');
+    const onlyPort = createLoader<{ port: number }>(
+      singleFieldSchema('TYPESPUN_BLANK_PORT'),
+    );
+
+    const error = getConfigError(() =>
+      onlyPort({ envFiles: [dotenvPath], source: { TYPESPUN_BLANK_PORT: '' } }),
+    );
+
+    expect(error.issues).toEqual([
+      {
+        code: 'missing_value',
+        path: 'port',
+        envKey: 'TYPESPUN_BLANK_PORT',
+        message: 'Missing required value for port',
+      },
+    ]);
   });
 
   test('skips an optional missing dotenv file instead of reporting a read failure', () => {
