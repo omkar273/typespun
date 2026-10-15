@@ -10,6 +10,9 @@
 - `with-fastify/` demonstrates a Fastify server on Node: inline `@default`
   tags instead of a defaults document, and `.ts` import specifiers because
   Node's type stripping does not rewrite them.
+- `with-express/` demonstrates an Express server on Node: inline `@default`
+  tags instead of a defaults document, and `.ts` import specifiers because
+  Node's type stripping does not rewrite them.
 - Framework examples keep declarations in the JSDoc style; decorators need a
   runtime that implements them, which Node's type stripping does not.
 - Generated files under `src/generated/` are committed artifacts. Change the
