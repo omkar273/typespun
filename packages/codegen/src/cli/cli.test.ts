@@ -110,7 +110,25 @@ describe('published binary', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Usage: typespun');
+    expect(result.stdout).toContain('-v, --version');
   });
+
+  test.each([[['--version']], [['-v']]])(
+    'prints version and exits zero for %j',
+    async (args: string[]) => {
+      const result = await runBinary(process.cwd(), args);
+
+      expect(result.exitCode).toBe(0);
+      const packageJson = JSON.parse(
+        await readFile(
+          join(import.meta.dirname, '..', '..', 'package.json'),
+          'utf8',
+        ),
+      );
+      expect(result.stdout).toBe(`${packageJson.version}\n`);
+      expect(result.stderr).toBe('');
+    },
+  );
 
   test('generates and checks a project through the real process', async () => {
     const project = await createProject();
