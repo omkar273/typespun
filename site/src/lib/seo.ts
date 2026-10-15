@@ -13,6 +13,15 @@ export interface PageSeo {
    * already carries the brand and the category.
    */
   absoluteTitle?: boolean;
+  /**
+   * `article` sets OpenGraph article fields (published time, tags) instead
+   * of the plain `website` type. Blog posts only.
+   */
+  article?: {
+    publishedTime: string;
+    modifiedTime?: string;
+    tags?: string[];
+  };
 }
 
 const socialCard = {
@@ -30,6 +39,7 @@ export function pageMetadata({
   description,
   path,
   absoluteTitle = false,
+  article,
 }: PageSeo): Metadata {
   const canonical = path === '/' ? siteUrl : `${siteUrl}${path}`;
   const socialTitle = absoluteTitle ? title : `${title} — ${appName}`;
@@ -38,14 +48,26 @@ export function pageMetadata({
     title: absoluteTitle ? { absolute: title } : title,
     description,
     alternates: { canonical },
-    openGraph: {
-      type: 'website',
-      siteName: appName,
-      url: canonical,
-      title: socialTitle,
-      description,
-      images: [socialCard],
-    },
+    openGraph: article
+      ? {
+          type: 'article',
+          siteName: appName,
+          url: canonical,
+          title: socialTitle,
+          description,
+          images: [socialCard],
+          publishedTime: article.publishedTime,
+          modifiedTime: article.modifiedTime,
+          tags: article.tags,
+        }
+      : {
+          type: 'website',
+          siteName: appName,
+          url: canonical,
+          title: socialTitle,
+          description,
+          images: [socialCard],
+        },
     twitter: {
       card: 'summary_large_image',
       title: socialTitle,

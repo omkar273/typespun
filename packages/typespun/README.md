@@ -101,7 +101,9 @@ Each leaf uses the highest-precedence defined value:
 4. compiled JSON/YAML defaults
 5. inline declaration defaults
 
-`source: {}` disables the ambient `process.env` fallback. Dotenv files are read
+A blank value (`KEY=`) in `source`, `process.env` or a dotenv file counts as
+unset and falls through to the next level. `source: {}` disables the ambient
+`process.env` fallback. Dotenv files are read
 synchronously without mutating `process.env`; typed overrides are validated but
 not string-coerced.
 

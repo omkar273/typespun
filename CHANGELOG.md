@@ -9,6 +9,20 @@ generated-module ABI is versioned separately by `GeneratedSchema.protocolVersion
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-15
+
+### Changed
+
+- A blank environment value now counts as unset. An empty string in `source`,
+  in ambient `process.env` or in a dotenv file (`KEY=`) falls through to the
+  next precedence level: dotenv, then compiled defaults, then inline defaults.
+  A required field with only blank values reports `missing_value` instead of
+  `invalid_value`. Before, a `.env.example`-style `POSTHOG_HEATMAPS=` line
+  failed with "Expected a boolean", so a consumer had to filter blanks out
+  before it called the loader. A string field that read `""` from the
+  environment is now unset; set an override or a default to keep an empty
+  string.
+
 ## [0.1.5] - 2026-09-22
 
 ### Fixed
@@ -134,7 +148,8 @@ First publish with a usable `dist` for both packages: schema analysis, the
 runtime resolver with fixed source precedence, aggregated `ConfigError`
 diagnostics, and secret-aware redaction.
 
-[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/omkar273/typespun/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/omkar273/typespun/releases/tag/v0.1.6
 [0.1.5]: https://github.com/omkar273/typespun/releases/tag/v0.1.5
 [0.1.4]: https://github.com/omkar273/typespun/releases/tag/v0.1.4
 [0.1.3]: https://github.com/omkar273/typespun/releases/tag/v0.1.3

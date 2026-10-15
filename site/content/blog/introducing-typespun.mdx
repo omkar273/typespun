@@ -1,0 +1,54 @@
+---
+title: Introducing Typespun
+description: Why we started generating configuration loaders from a single TypeScript interface instead of hand-writing a schema.
+date: 2026-09-22
+author: omkar273
+tags: [announcement, typescript]
+---
+
+Configuration in a TypeScript project is usually described three times: once
+as a type, once as `process.env` parsing, and once as a runtime validation
+schema. The three copies drift, and the drift shows up in production, not in
+review.
+
+Typespun inverts the usual order. Instead of writing a schema and deriving a
+type from it, you annotate one interface:
+
+```ts
+/** @typespun */
+export interface AppConfig {
+  server: { host: string; port: number };
+  /** @secret */
+  apiToken: string;
+}
+```
+
+`typespun generate` writes a committed `loadConfig()` module from it — a real
+file you review in diffs, not a black box. At startup it resolves typed
+overrides, an explicit source or `process.env`, dotenv files, and compiled
+defaults, in that documented order, then validates every field and reports
+every problem at once.
+
+Two things follow from that design, and they're the reason the project
+exists:
+
+**A five-source precedence chain, resolved per field.** Most environment
+libraries validate a single source. Typespun picks the highest-priority value
+that exists for each field independently, then validates it — so a broken
+low-priority source can never break a working high-priority one. See
+[source precedence](/docs/concepts/precedence).
+
+**Secret-aware diagnostics.** A field marked `@secret` never has its value —
+or type-specific detail about it — echoed back in an error, even when that
+field is the one that failed validation. See
+[validation and redaction](/docs/concepts/secrets).
+
+Typespun is pre-1.0, MIT licensed, and deliberately narrow: a fixed set of
+supported types, no async or plugin sources, and a build step you have to
+accept. If your configuration is a handful of flat environment variables, a
+plain Zod schema is simpler, and [the comparison page](/compare) says so
+outright.
+
+The fastest way to see it is the [playground](/playground) — the real
+analyzer and the real runtime, running in your browser, nothing to install.
+Break something on purpose and read the error.

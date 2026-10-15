@@ -1,0 +1,55 @@
+---
+title: Why a generated loader, not a runtime schema
+description: The trade-off at the center of Typespun — a build step and committed output, in exchange for the TypeScript declaration being the only place the contract lives.
+date: 2026-09-23
+author: omkar273
+tags: [design, typescript]
+---
+
+The most common question about Typespun is some version of "why not just
+Zod?" It's a fair question, because Zod is excellent, and it already solves
+the type-drift problem: infer the TypeScript type from the schema, and there
+is only one thing to keep in sync.
+
+So why generate code instead?
+
+## TypeScript types don't exist at runtime
+
+A schema library validates at runtime and derives a compile-time type from
+it. That works well. But the schema is still the thing you hand-write, and
+it's written in the schema library's vocabulary, not in TypeScript's. Typespun
+starts from the other direction: the interface is the thing you hand-write,
+and everything else — the runtime schema, the precedence resolution, the
+validation — is generated from it.
+
+That inversion buys two things a schema can't, by construction:
+
+- **A reviewable, diffable artifact.** The generated `loadConfig()` module is
+  a real file. `typespun check` fails CI when it goes stale, so drift between
+  the declaration and the loader is caught in CI, not in production. See
+  [generated code](/docs/concepts/generated-code).
+- **Behavior that's built in, not assembled.** The five-source precedence
+  chain and secret-aware redaction aren't things you configure — they're the
+  only behavior Typespun has. There's less to get wrong by omission.
+
+## What it costs
+
+This is the part worth saying plainly rather than skipping past: Typespun
+asks you to accept a build step and a committed generated file. That's a real
+cost. It also supports a narrower set of types than a general schema library —
+no dates, tuples, records, or custom transforms — and there's no async or
+plugin source, so a value from a secrets manager has to be fetched by your
+own code and handed in as a typed override.
+
+If your configuration is eight flat environment variables, none of this is
+worth it. A five-line Zod schema is simpler, and inline validation is the
+right call. The
+[capability matrix on the comparison page](/compare#capability-matrix) lays
+out where Typespun differs, where it's just table stakes, and where the
+alternatives plainly win.
+
+The trade only pays for itself once a configuration contract is big enough,
+and touched by enough people, that "one more schema to keep in sync" stops
+being free. Where that line falls is genuinely a judgment call — try the
+[playground](/playground) on your own shape of config and see which side of
+it you land on.

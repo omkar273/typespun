@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { Install } from '@/components/install';
+import { Eyebrow } from '@/components/eyebrow';
 import { JsonLd } from '@/components/json-ld';
 import { pageMetadata, softwareApplicationJsonLd } from '@/lib/seo';
 import { links } from '@/lib/shared';
@@ -121,14 +122,6 @@ const PROOF = [
     href: links.changelog,
   },
 ];
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-display text-[13px] font-medium uppercase tracking-[0.12em] text-brand-accent dark:text-brand-accent-bright">
-      {children}
-    </p>
-  );
-}
 
 export default function HomePage() {
   return (

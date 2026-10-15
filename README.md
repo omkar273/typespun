@@ -114,6 +114,7 @@ Each leaf takes the highest-precedence value that is defined:
 4. compiled JSON/YAML defaults
 5. inline defaults
 
+A blank value such as `KEY=` counts as unset and falls through to the next level.
 Passing `source: {}` deliberately disables the ambient `process.env` fallback, and
 dotenv files are parsed without mutating `process.env`. See
 [source precedence](docs/concepts/source-precedence.md).

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { pagesSource, source } from '@/lib/source';
+import { blogSource, pagesSource, source } from '@/lib/source';
 import { siteUrl } from '@/lib/shared';
 
 export const dynamic = 'force-static';
@@ -8,8 +8,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes = [
     { path: '/', priority: 1 },
     { path: '/compare', priority: 0.9 },
+    { path: '/blog', priority: 0.6 },
     { path: '/playground', priority: 0.5 },
   ];
+
+  const posts = blogSource
+    .getPages()
+    .filter((post) => !post.data.draft)
+    .map((post) => ({
+      url: `${siteUrl}${post.url}`,
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    }));
 
   const docs = source.getPages().map((page) => ({
     url: `${siteUrl}${page.url}`,
@@ -24,6 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: route.priority,
     })),
     ...docs,
+    ...posts,
     // `/compare` is rendered from `pagesSource`; it is already listed above.
     ...pagesSource
       .getPages()

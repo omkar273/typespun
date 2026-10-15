@@ -35,7 +35,8 @@ encryption or a secret store.
 
 ## Coercion rules
 
-- strings remain strings, including empty strings
+- strings remain strings; a blank environment value counts as unset, so it
+  never reaches coercion
 - numbers accept complete decimal/scientific strings and must be finite
 - booleans accept `true` or `false`, case-insensitively
 - string enums/literal unions require an exact, nonempty member
